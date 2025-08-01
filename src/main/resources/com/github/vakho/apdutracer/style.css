@@ -1,0 +1,19 @@
+.apdu-request {
+    -fx-fill: blue;
+}
+
+.apdu-response {
+    -fx-fill: green;
+}
+
+.unknown {
+    -fx-fill: gray;
+}
+
+.default {
+    -fx-fill: black;
+}
+
+.vs-pane {
+    -fx-border-color: #c0c0c0;
+}

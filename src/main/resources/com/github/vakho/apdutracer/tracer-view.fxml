@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Menu?>
+<?import javafx.scene.control.MenuBar?>
+<?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.SeparatorMenuItem?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.input.KeyCodeCombination?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<VBox styleClass="vbox-root" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.github.vakho.apdutracer.TracerController">
+   <children>
+      <MenuBar>
+        <menus>
+          <Menu mnemonicParsing="false" text="File">
+            <items>
+              <MenuItem mnemonicParsing="false" onAction="#saveToFile" text="Save to File">
+                     <accelerator>
+                        <KeyCodeCombination alt="UP" code="S" control="DOWN" meta="UP" shift="UP" shortcut="UP" />
+                     </accelerator>
+                  </MenuItem>
+                  <SeparatorMenuItem mnemonicParsing="false" />
+                  <MenuItem mnemonicParsing="false" onAction="#close" text="Close" />
+            </items>
+          </Menu>
+          <Menu mnemonicParsing="false" text="Help">
+            <items>
+              <MenuItem mnemonicParsing="false" text="About" />
+            </items>
+          </Menu>
+        </menus>
+      </MenuBar>
+      <VBox maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" spacing="10.0" stylesheets="@style.css" VBox.vgrow="ALWAYS">
+         <children>
+            <HBox alignment="CENTER_LEFT" spacing="10.0">
+               <children>
+                  <CheckBox fx:id="checkBoxBulk" mnemonicParsing="false" selected="true" text="Skip BULK Commands" />
+                  <CheckBox fx:id="checkBoxUnknown" mnemonicParsing="false" selected="true" text="Skip Unknown Commands" />
+                  <ComboBox fx:id="interfaceComboBox" maxWidth="1.7976931348623157E308" promptText="Select the interface..." HBox.hgrow="ALWAYS" />
+                  <Button minWidth="-Infinity" mnemonicParsing="false" onAction="#refreshInterfaces" prefWidth="100.0" text="Refresh">
+                     <graphic>
+                        <FontIcon iconLiteral="fa-refresh" />
+                     </graphic>
+                  </Button>
+               </children>
+            </HBox>
+            <HBox alignment="CENTER_LEFT" spacing="10.0" />
+            <VBox VBox.vgrow="ALWAYS">
+               <children>
+                  <HBox fx:id="hbox" minHeight="150.0" VBox.vgrow="ALWAYS" />
+                  <HBox>
+                     <children>
+                        <ToggleButton fx:id="btnAutoScroll" maxWidth="1.7976931348623157E308" mnemonicParsing="false" selected="true" text="Auto Scroll" HBox.hgrow="ALWAYS">
+                           <graphic>
+                              <FontIcon iconLiteral="fa-list" />
+                           </graphic>
+                        </ToggleButton>
+                     </children>
+                  </HBox>
+               </children>
+            </VBox>
+            <HBox alignment="CENTER_LEFT" spacing="10.0">
+               <children>
+                  <ToggleButton fx:id="btnStartStop" maxWidth="1.7976931348623157E308" minWidth="180.0" mnemonicParsing="false" onAction="#startStop" text="Start / Stop Tracing" HBox.hgrow="ALWAYS" />
+                  <Button fx:id="btnClear" minWidth="-Infinity" mnemonicParsing="false" onAction="#clear" prefWidth="180.0" text="Clear the Output">
+                     <graphic>
+                        <FontIcon iconLiteral="fa-eraser" />
+                     </graphic>
+                  </Button>
+               </children>
+            </HBox>
+         </children>
+         <padding>
+            <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+         </padding>
+      </VBox>
+   </children>
+</VBox>
