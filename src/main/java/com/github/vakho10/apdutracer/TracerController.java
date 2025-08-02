@@ -1,8 +1,8 @@
-package com.github.vakho.apdutracer;
+package com.github.vakho10.apdutracer;
 
-import com.github.vakho.apdutracer.apdu.APDURequest;
-import com.github.vakho.apdutracer.apdu.APDUResponse;
-import com.github.vakho.apdutracer.apdu.CommandType;
+import com.github.vakho10.apdutracer.apdu.APDURequest;
+import com.github.vakho10.apdutracer.apdu.APDUResponse;
+import com.github.vakho10.apdutracer.apdu.CommandType;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.fxml.Initializable;

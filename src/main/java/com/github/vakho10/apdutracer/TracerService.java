@@ -1,4 +1,4 @@
-package com.github.vakho.apdutracer;
+package com.github.vakho10.apdutracer;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;

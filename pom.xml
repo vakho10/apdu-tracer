@@ -3,9 +3,9 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <groupId>ge.gov.sda</groupId>
+    <groupId>com.github.vakho10</groupId>
     <artifactId>apdu-tracer</artifactId>
-    <version>1.0.0</version>
+    <version>20250802101500</version>
 
     <name>APDU Tracer</name>
     <description>APDU tracer JavaFX modular application. Uses tshark CMD tool to trace and show APDUs.</description>
@@ -133,7 +133,7 @@
                     <vendor>PSDA</vendor>
                     <type>APP_IMAGE</type>
                     <runtimeImage>${java.home}</runtimeImage>
-                    <module>com.github.vakho.apdutracer/com.github.vakho.apdutracer.TracerApplication</module>
+                    <module>com.github.vakho10.apdutracer/com.github.vakho10.apdutracer.TracerApplication</module>
                     <modulePaths>
                         <modulePath>target/jmods</modulePath>
                     </modulePaths>

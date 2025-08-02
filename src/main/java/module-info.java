@@ -1,4 +1,4 @@
-module com.github.vakho.apdutracer {
+module com.github.vakho10.apdutracer {
     requires javafx.controls;
     requires javafx.fxml;
     requires org.fxmisc.richtext;
@@ -8,8 +8,8 @@ module com.github.vakho.apdutracer {
     requires org.kordamp.ikonli.fontawesome;
     requires atlantafx.base;
 
-    opens com.github.vakho.apdutracer to javafx.fxml;
-    exports com.github.vakho.apdutracer;
-    exports com.github.vakho.apdutracer.apdu;
-    opens com.github.vakho.apdutracer.apdu to javafx.fxml;
+    opens com.github.vakho10.apdutracer to javafx.fxml;
+    exports com.github.vakho10.apdutracer;
+    exports com.github.vakho10.apdutracer.apdu;
+    opens com.github.vakho10.apdutracer.apdu to javafx.fxml;
 }

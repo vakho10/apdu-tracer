@@ -1,4 +1,4 @@
-package com.github.vakho.apdutracer;
+package com.github.vakho10.apdutracer;
 
 public enum CommandType {
     ESCAPE("Escape"),                   // Vendor-specific Escape commands (e.g. [0200], [0c23], etc.)
