@@ -16,6 +16,10 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <javafx.version>21</javafx.version>
+        <jre.download.link>
+            https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.8%2B9/OpenJDK21U-jre_x64_windows_hotspot_21.0.8_9.zip
+        </jre.download.link>
+        <jre.root.folder>jdk-21.0.8+9-jre</jre.root.folder>
     </properties>
 
     <dependencies>
@@ -114,6 +118,25 @@
                 </executions>
             </plugin>
 
+            <plugin>
+                <groupId>com.googlecode.maven-download-plugin</groupId>
+                <artifactId>download-maven-plugin</artifactId>
+                <version>1.13.0</version>
+                <executions>
+                    <execution>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>wget</goal>
+                        </goals>
+                        <configuration>
+                            <url>${jre.download.link}</url>
+                            <unpack>true</unpack>
+                            <outputDirectory>${project.build.directory}/java</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- jpackage plugin -->
             <plugin>
                 <groupId>org.panteleyev</groupId>
@@ -132,7 +155,7 @@
                     <appVersion>${project.version}</appVersion>
                     <vendor>PSDA</vendor>
                     <type>APP_IMAGE</type>
-                    <runtimeImage>${java.home}</runtimeImage>
+                    <runtimeImage>${project.build.directory}/java/${jre.root.folder}</runtimeImage>
                     <module>com.github.vakho10.apdutracer/com.github.vakho10.apdutracer.TracerApplication</module>
                     <modulePaths>
                         <modulePath>target/jmods</modulePath>
