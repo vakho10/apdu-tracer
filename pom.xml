@@ -124,7 +124,8 @@
                 <version>1.13.0</version>
                 <executions>
                     <execution>
-                        <phase>validate</phase>
+                        <id>download-jre</id>
+                        <phase>package</phase>
                         <goals>
                             <goal>wget</goal>
                         </goals>
@@ -144,7 +145,8 @@
                 <version>1.6.6</version>
                 <executions>
                     <execution>
-                        <phase>verify</phase>
+                        <id>run-jpackage</id>
+                        <phase>package</phase>
                         <goals>
                             <goal>jpackage</goal>
                         </goals>
