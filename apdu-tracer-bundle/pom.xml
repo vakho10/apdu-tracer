@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.github.vakho10</groupId>
+        <artifactId>apdu-tracer</artifactId>
+        <version>20250807115200</version>
+    </parent>
+
+    <artifactId>apdu-tracer-bundle</artifactId>
+
+    <properties>
+        <jre.download.link>
+            https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.8%2B9/OpenJDK21U-jre_x64_windows_hotspot_21.0.8_9.zip
+        </jre.download.link>
+        <jre.root.folder>jdk-21.0.8+9-jre</jre.root.folder>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.github.vakho10</groupId>
+            <artifactId>apdu-tracer-app</artifactId>
+            <version>${parent.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- (1) Download runtime JRE -->
+            <plugin>
+                <groupId>com.googlecode.maven-download-plugin</groupId>
+                <artifactId>download-maven-plugin</artifactId>
+                <version>1.13.0</version>
+                <executions>
+                    <execution>
+                        <id>download-jre</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>wget</goal>
+                        </goals>
+                        <configuration>
+                            <url>${jre.download.link}</url>
+                            <unpack>true</unpack>
+                            <outputDirectory>${project.build.directory}/java</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- (2) Copy fat JAR to the "app" folder -->
+            <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.0.0</version>
+                <executions>
+                    <execution>
+                        <id>copy-main-jar-to-app</id>
+                        <phase>package</phase>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.build.directory}/app"/>
+                                <copy file="${project.basedir}/../apdu-tracer-app/target/apdu-tracer-app.jar"
+                                      todir="${project.build.directory}/app"/>
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- (3) jpackage plugin -->
+            <plugin>
+                <groupId>org.panteleyev</groupId>
+                <artifactId>jpackage-maven-plugin</artifactId>
+                <version>1.6.6</version>
+                <executions>
+                    <execution>
+                        <id>run-jpackage</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jpackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <name>${parent.artifactId}</name>
+                    <appVersion>${parent.version}</appVersion>
+                    <vendor>github.com/vakho10</vendor>
+                    <type>APP_IMAGE</type>
+                    <runtimeImage>${project.build.directory}/java/${jre.root.folder}</runtimeImage>
+
+                    <input>${project.build.directory}/app</input>
+                    <destination>${project.build.directory}/dist</destination>
+
+                    <mainJar>apdu-tracer-app.jar</mainJar>
+                    <mainClass>org.springframework.boot.loader.launch.JarLauncher</mainClass>
+
+                    <javaOptions>
+                        <option>--enable-preview</option>
+                        <option>-Dfile.encoding=UTF-8</option>
+                    </javaOptions>
+
+                    <icon>${project.basedir}/../apdu-tracer-app/target/classes/logo/icon_32.ico</icon>
+                </configuration>
+            </plugin>
+
+            <!-- (4) Copy application.properties file to the "dist" folder-->
+            <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.0.0</version>
+                <executions>
+                    <execution>
+                        <id>copy-config-to-exe-dir</id>
+                        <phase>verify</phase>
+                        <configuration>
+                            <target>
+                                <copy file="${project.basedir}/../apdu-tracer-app/target/classes/application.properties"
+                                      tofile="${project.build.directory}/dist/${parent.artifactId}/config/application.properties"/>
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
