@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.github.vakho10</groupId>
         <artifactId>apdu-tracer</artifactId>
-        <version>20250807115200</version>
+        <version>20250807131400</version>
     </parent>
 
     <artifactId>apdu-tracer-bundle</artifactId>
