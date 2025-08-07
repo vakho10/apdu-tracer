@@ -139,7 +139,7 @@
                 <executions>
                     <execution>
                         <id>download-jre</id>
-                        <phase>package</phase>
+                        <phase>prepare-package</phase>
                         <goals>
                             <goal>wget</goal>
                         </goals>
@@ -166,14 +166,14 @@
                 </configuration>
             </plugin>
 
-            <!-- (2) Copy the fat JAR to the "app" folder -->
+            <!-- (2) Copy fat JAR to the "app" folder -->
             <plugin>
                 <artifactId>maven-antrun-plugin</artifactId>
                 <version>3.0.0</version>
                 <executions>
                     <execution>
                         <id>copy-main-jar-to-app</id>
-                        <phase>verify</phase>
+                        <phase>package</phase>
                         <configuration>
                             <target>
                                 <mkdir dir="${project.build.directory}/app"/>
@@ -196,7 +196,7 @@
                 <executions>
                     <execution>
                         <id>run-jpackage</id>
-                        <phase>verify</phase>
+                        <phase>package</phase>
                         <goals>
                             <goal>jpackage</goal>
                         </goals>
@@ -222,6 +222,27 @@
 
                     <icon>src/main/resources/logo/icon_32.ico</icon>
                 </configuration>
+            </plugin>
+
+            <!-- (4) Copy application.properties file to the "dist" folder-->
+            <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.0.0</version>
+                <executions>
+                    <execution>
+                        <id>copy-config-to-exe-dir</id>
+                        <phase>verify</phase>
+                        <configuration>
+                            <target>
+                                <copy file="${project.basedir}/src/main/resources/application.properties"
+                                      tofile="${project.build.directory}/dist/${project.artifactId}/config/application.properties"/>
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
