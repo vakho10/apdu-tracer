@@ -3,26 +3,71 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.4</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
     <groupId>com.github.vakho10</groupId>
     <artifactId>apdu-tracer</artifactId>
-    <version>20250802101500</version>
+    <version>20250807115200</version>
 
     <name>APDU Tracer</name>
     <description>APDU tracer JavaFX modular application. Uses tshark CMD tool to trace and show APDUs.</description>
+    <url>https://github.com/vakho10/apdu-tracer</url>
+
+    <organization>
+        <name>Vakho10</name>
+        <url>https://github.com/vakho10</url>
+    </organization>
+
+    <developers>
+        <developer>
+            <id>vakho10</id>
+            <name>Vakho</name>
+            <url>https://github.com/vakho10</url>
+            <roles>
+                <role>developer</role>
+            </roles>
+        </developer>
+    </developers>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
-        <javafx.version>21</javafx.version>
+        <javafx.version>21.0.8</javafx.version>
         <jre.download.link>
             https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.8%2B9/OpenJDK21U-jre_x64_windows_hotspot_21.0.8_9.zip
         </jre.download.link>
         <jre.root.folder>jdk-21.0.8+9-jre</jre.root.folder>
+        <main-class>com.github.vakho10.apdutracer.TracerApplication</main-class>
     </properties>
 
     <dependencies>
+        <!-- Spring Boot Starter -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-tomcat</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- JavaFX -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
@@ -33,12 +78,14 @@
             <artifactId>javafx-fxml</artifactId>
             <version>${javafx.version}</version>
         </dependency>
-        <!-- https://mvnrepository.com/artifact/org.fxmisc.richtext/richtextfx -->
+
+        <!-- richtextfx -->
         <dependency>
             <groupId>org.fxmisc.richtext</groupId>
             <artifactId>richtextfx</artifactId>
             <version>0.11.5</version>
         </dependency>
+
         <!-- ikonli (icons) -->
         <dependency>
             <groupId>org.kordamp.ikonli</groupId>
@@ -55,6 +102,7 @@
             <artifactId>ikonli-fontawesome-pack</artifactId>
             <version>12.4.0</version>
         </dependency>
+
         <!-- atlantafx (css) -->
         <dependency>
             <groupId>io.github.mkpaz</groupId>
@@ -66,58 +114,24 @@
     <build>
         <finalName>${project.artifactId}</finalName>
         <plugins>
-            <!-- Compiler -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
                 <configuration>
-                    <source>${maven.compiler.source}</source>
-                    <target>${maven.compiler.target}</target>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                        <path>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-configuration-processor</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
 
-            <!-- Copy the main jar to the "app" folder -->
-            <plugin>
-                <artifactId>maven-antrun-plugin</artifactId>
-                <version>3.0.0</version>
-                <executions>
-                    <execution>
-                        <id>copy-jar-to-jmods</id>
-                        <phase>package</phase>
-                        <configuration>
-                            <target>
-                                <mkdir dir="${project.build.directory}/jmods"/>
-                                <copy file="${project.build.directory}/${project.build.finalName}.jar"
-                                      todir="${project.build.directory}/jmods"/>
-                            </target>
-                        </configuration>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!-- Copy runtime dependencies (JavaFX libs) to "app" folder -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>copy-dependencies</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>copy-dependencies</goal>
-                        </goals>
-                        <configuration>
-                            <includeScope>runtime</includeScope>
-                            <outputDirectory>${project.build.directory}/jmods</outputDirectory>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
+            <!-- (0) Download runtime JRE -->
             <plugin>
                 <groupId>com.googlecode.maven-download-plugin</groupId>
                 <artifactId>download-maven-plugin</artifactId>
@@ -138,7 +152,43 @@
                 </executions>
             </plugin>
 
-            <!-- jpackage plugin -->
+            <!-- (1) Build monolithic fat JAR (with Spring Boot Maven Plugin) -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <!-- (2) Copy the fat JAR to the "app" folder -->
+            <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.0.0</version>
+                <executions>
+                    <execution>
+                        <id>copy-main-jar-to-app</id>
+                        <phase>verify</phase>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.build.directory}/app"/>
+                                <copy file="${project.build.directory}/${project.build.finalName}.jar"
+                                      todir="${project.build.directory}/app"/>
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- (3) jpackage plugin -->
             <plugin>
                 <groupId>org.panteleyev</groupId>
                 <artifactId>jpackage-maven-plugin</artifactId>
@@ -146,27 +196,30 @@
                 <executions>
                     <execution>
                         <id>run-jpackage</id>
-                        <phase>package</phase>
+                        <phase>verify</phase>
                         <goals>
                             <goal>jpackage</goal>
                         </goals>
                     </execution>
                 </executions>
                 <configuration>
-                    <name>${project.name}</name>
+                    <name>${project.artifactId}</name>
                     <appVersion>${project.version}</appVersion>
-                    <vendor>PSDA</vendor>
+                    <vendor>github.com/vakho10</vendor>
                     <type>APP_IMAGE</type>
                     <runtimeImage>${project.build.directory}/java/${jre.root.folder}</runtimeImage>
-                    <module>com.github.vakho10.apdutracer/com.github.vakho10.apdutracer.TracerApplication</module>
-                    <modulePaths>
-                        <modulePath>target/jmods</modulePath>
-                    </modulePaths>
-                    <destination>target/dist</destination>
+
+                    <input>${project.build.directory}/app</input>
+                    <destination>${project.build.directory}/dist</destination>
+
+                    <mainJar>${project.build.finalName}.jar</mainJar>
+                    <mainClass>org.springframework.boot.loader.launch.JarLauncher</mainClass>
+
                     <javaOptions>
                         <option>--enable-preview</option>
                         <option>-Dfile.encoding=UTF-8</option>
                     </javaOptions>
+
                     <icon>src/main/resources/logo/icon_32.ico</icon>
                 </configuration>
             </plugin>

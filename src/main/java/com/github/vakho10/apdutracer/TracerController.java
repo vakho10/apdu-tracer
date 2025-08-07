@@ -14,8 +14,10 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.stage.FileChooser;
 import javafx.stage.FileChooser.ExtensionFilter;
+import lombok.extern.slf4j.Slf4j;
 import org.fxmisc.flowless.VirtualizedScrollPane;
 import org.fxmisc.richtext.CodeArea;
+import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -33,6 +35,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
+@Slf4j
+@Component
 public class TracerController extends AbstractController implements Initializable {
 
     private ExecutorService executorService;
@@ -119,7 +123,7 @@ public class TracerController extends AbstractController implements Initializabl
                     process.waitFor();
                 }
             } catch (Exception e) {
-                e.printStackTrace(); // TODO log somewhere?
+                log.error(e.getMessage(), e);
             }
             Platform.runLater(() -> {
                 interfaceComboBox.getItems().setAll(interfaces);

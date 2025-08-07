@@ -1,13 +1,24 @@
 package com.github.vakho10.apdutracer;
 
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.function.Consumer;
 
+@Slf4j
+@Service
 public class TracerService {
 
+    @Setter
+    @Getter
     private String interfaceName;
 
+    @Setter
+    @Getter
     private Consumer<String> capturedLineConsumer;
 
     private Process process;
@@ -45,7 +56,7 @@ public class TracerService {
                     process.waitFor();
                 }
             } catch (Exception e) {
-                e.printStackTrace(); // TODO log somewhere?
+                log.error(e.getMessage(), e);
             }
         }).start();
     }
@@ -54,21 +65,5 @@ public class TracerService {
         if (process != null) {
             process.destroy();
         }
-    }
-
-    public String getInterfaceName() {
-        return interfaceName;
-    }
-
-    public void setInterfaceName(String interfaceName) {
-        this.interfaceName = interfaceName;
-    }
-
-    public Consumer<String> getCapturedLineConsumer() {
-        return capturedLineConsumer;
-    }
-
-    public void setCapturedLineConsumer(Consumer<String> capturedLineConsumer) {
-        this.capturedLineConsumer = capturedLineConsumer;
     }
 }

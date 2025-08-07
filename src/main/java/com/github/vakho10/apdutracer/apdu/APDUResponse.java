@@ -44,7 +44,7 @@ public class APDUResponse {
     }
 
     public String getSwAsHexString() {
-        return HEX_FORMAT.formatHex(new byte[] {(byte) sw1, (byte) sw2});
+        return HEX_FORMAT.formatHex(new byte[]{(byte) sw1, (byte) sw2});
     }
 
     @Override
