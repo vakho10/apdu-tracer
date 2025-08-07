@@ -75,7 +75,6 @@
             <plugin>
                 <groupId>org.panteleyev</groupId>
                 <artifactId>jpackage-maven-plugin</artifactId>
-                <version>1.6.6</version>
                 <executions>
                     <execution>
                         <id>run-jpackage</id>
@@ -88,8 +87,8 @@
                 <configuration>
                     <name>${parent.artifactId}</name>
                     <appVersion>${parent.version}</appVersion>
-                    <vendor>github.com/vakho10</vendor>
-                    <type>APP_IMAGE</type>
+                    <vendor>github.com</vendor>
+                    <type>APP_IMAGE</type> <!-- Optional: still create an app image -->
                     <runtimeImage>${project.build.directory}/java/${jre.root.folder}</runtimeImage>
 
                     <input>${project.build.directory}/app</input>
@@ -103,7 +102,7 @@
                         <option>-Dfile.encoding=UTF-8</option>
                     </javaOptions>
 
-                    <icon>${project.basedir}/../apdu-tracer-app/target/classes/logo/icon_32.ico</icon>
+                    <icon>${project.basedir}/../apdu-tracer-app/target/classes/${icon.file}</icon>
                 </configuration>
             </plugin>
 
@@ -129,4 +128,86 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- Windows -->
+        <profile>
+            <id>windows</id>
+            <activation>
+                <os>
+                    <family>windows</family>
+                </os>
+            </activation>
+            <properties>
+                <jre.download.link>
+                    https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.8%2B9/OpenJDK21U-jre_x64_windows_hotspot_21.0.8_9.zip
+                </jre.download.link>
+                <jre.root.folder>jdk-21.0.8+9-jre</jre.root.folder>
+                <icon.file>logo/icon_32.ico</icon.file>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.panteleyev</groupId>
+                        <artifactId>jpackage-maven-plugin</artifactId>
+                        <configuration>
+                            <type>APP_IMAGE</type>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!-- TODO: Test this! -->
+        <!-- Linux -->
+        <profile>
+            <id>linux</id>
+            <activation>
+                <os>
+                    <family>unix</family>
+                </os>
+            </activation>
+            <properties>
+                <jre.download.link>https://.../OpenJDK21U-jre_x64_linux_hotspot_21.0.8_9.tar.gz</jre.download.link>
+                <jre.root.folder>jdk-21.0.8+9-jre</jre.root.folder>
+                <icon.file>logo/icon_256.png</icon.file>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.panteleyev</groupId>
+                        <artifactId>jpackage-maven-plugin</artifactId>
+                        <configuration>
+                            <type>DEB</type>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!-- TODO: Test this! -->
+        <!-- Mac -->
+        <profile>
+            <id>mac</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                </os>
+            </activation>
+            <properties>
+                <jre.download.link>https://.../OpenJDK21U-jre_x64_mac_hotspot_21.0.8_9.tar.gz</jre.download.link>
+                <jre.root.folder>jdk-21.0.8+9-jre</jre.root.folder>
+                <icon.file>logo/icon.icns</icon.file>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.panteleyev</groupId>
+                        <artifactId>jpackage-maven-plugin</artifactId>
+                        <configuration>
+                            <type>PKG</type>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
