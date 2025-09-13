@@ -28,6 +28,37 @@
 
     <build>
         <plugins>
+            <!-- Safe clean plugin -->
+            <plugin>
+                <artifactId>maven-clean-plugin</artifactId>
+                <version>3.4.1</version>
+                <configuration>
+                    <!-- Don't fail if a file is locked -->
+                    <failOnError>false</failOnError>
+                </configuration>
+            </plugin>
+
+            <!-- AntRun to delete dist folder forcibly on Windows -->
+            <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.0.0</version>
+                <executions>
+                    <execution>
+                        <id>delete-dist-windows</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <echo message="Attempting to delete bundle/target/dist folder (Windows-safe)"/>
+                                <delete dir="${project.build.directory}/dist" failonerror="false"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- (1) Download runtime JRE -->
             <plugin>
                 <groupId>com.googlecode.maven-download-plugin</groupId>
