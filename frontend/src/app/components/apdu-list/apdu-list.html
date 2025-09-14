@@ -1,0 +1,28 @@
+<div class="vbox flex-grow trace-wrapper">
+  <div class="apdu-controls">
+    <mat-slide-toggle [checked]="autoScroll()" (change)="autoScroll.set($event.checked)">
+      <mat-icon>list</mat-icon>
+      Auto Scroll
+    </mat-slide-toggle>
+  </div>
+  <div #container class="apdu-container">
+    @for (trace of traces(); track trace.timestamp) {
+      <mat-card>
+        <mat-card-header>
+          <mat-card-title>{{ trace.apdu_type }}</mat-card-title>
+          <mat-card-subtitle>{{ trace.timestamp }}</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          @if (trace.apdu_type === 'APDU_REQUEST') {
+            <div><strong>Command:</strong> {{ trace.command }}</div>
+          }
+          <div><strong>Data:</strong> {{ trace.data }}</div>
+          @if (trace.apdu_type === 'APDU_RESPONSE') {
+            <mat-divider></mat-divider>
+            <div><strong>Status Word (SW):</strong> {{ trace.sw }}</div>
+          }
+        </mat-card-content>
+      </mat-card>
+    }
+  </div>
+</div>

@@ -1,0 +1,49 @@
+@use '@angular/material' as mat;
+
+html {
+  @include mat.theme((
+    color: (
+      primary: mat.$rose-palette,
+      tertiary: mat.$red-palette,
+    ),
+    typography: Roboto,
+    density: 0,
+  ));
+}
+
+body {
+  color-scheme: light;
+
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+
+  margin: 0;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+}
+
+// ----------------------------------------------
+
+.hbox {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.vbox {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.flex-grow {
+  flex-grow: 1;
+}

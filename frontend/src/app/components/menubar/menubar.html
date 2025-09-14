@@ -1,0 +1,19 @@
+<div class="hbox">
+  <!-- Menu Bar -->
+  <mat-toolbar color="primary">
+    <button mat-button [matMenuTriggerFor]="fileMenu">File</button>
+    <button mat-button [matMenuTriggerFor]="helpMenu">Help</button>
+  </mat-toolbar>
+
+  <!-- File menu -->
+  <mat-menu #fileMenu="matMenu">
+    <button mat-menu-item (click)="saveToFile()">Save to File</button>
+    <mat-divider></mat-divider>
+    <button mat-menu-item (click)="close()">Close</button>
+  </mat-menu>
+
+  <!-- Help menu -->
+  <mat-menu #helpMenu="matMenu">
+    <button mat-menu-item>About</button>
+  </mat-menu>
+</div>

@@ -1,0 +1,23 @@
+<div class="hbox">
+  <mat-checkbox [checked]="skipBulk()" (change)="skipBulk.set($event.checked)">
+    Skip BULK Commands
+  </mat-checkbox>
+
+  <mat-checkbox [checked]="skipUnknown()" (change)="skipUnknown.set($event.checked)">
+    Skip Unknown Commands
+  </mat-checkbox>
+
+  <mat-form-field appearance="outline" class="flex-grow">
+    <mat-label>Select the interface...</mat-label>
+    <mat-select [value]="selectedInterface()" (valueChange)="selectedInterface.set($event)">
+      @for (iface of interfaces(); track iface) {
+        <mat-option [value]="iface">{{ iface }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <button mat-raised-button color="primary" (click)="refreshInterfaces()">
+    <mat-icon>refresh</mat-icon>
+    Refresh
+  </button>
+</div>

@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.github.vakho10.apdutracer</groupId>
+        <artifactId>parent</artifactId>
+        <version>2.0.0</version>
+    </parent>
+
+    <artifactId>bundle</artifactId>
+
+    <properties>
+        <jre.download.link.windows>
+            https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.8%2B9/OpenJDK21U-jre_x64_windows_hotspot_21.0.8_9.zip
+        </jre.download.link.windows>
+        <jre.root.folder.windows>jdk-21.0.8+9-jre</jre.root.folder.windows>
+        <icon.file.windows>public/favicon.ico</icon.file.windows>
+        <jcef.dir>C:/Tools/jcef-windows-amd64</jcef.dir> <!-- local JCEF folder -->
+    </properties>
+
+    <dependencies>
+        <!-- This project will build after app -->
+        <dependency>
+            <groupId>com.github.vakho10.apdutracer</groupId>
+            <artifactId>app</artifactId>
+            <version>${parent.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Safe clean plugin -->
+            <plugin>
+                <artifactId>maven-clean-plugin</artifactId>
+                <version>3.4.1</version>
+                <configuration>
+                    <!-- Don't fail if a file is locked -->
+                    <failOnError>false</failOnError>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.0.0</version>
+                <executions>
+                    <!-- AntRun to delete dist folder forcibly on Windows -->
+                    <execution>
+                        <id>delete-dist-windows</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <echo message="Attempting to delete bundle/target/dist folder (Windows-safe)"/>
+                                <delete dir="${project.build.directory}/dist" failonerror="false"/>
+                            </target>
+                        </configuration>
+                    </execution>
+
+                    <!-- 1) Copy Spring Boot fat jar -->
+                    <execution>
+                        <id>copy-boot-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.build.directory}/app"/>
+                                <copy file="${project.basedir}/../app/target/app.jar"
+                                      todir="${project.build.directory}/app"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- 2) Copy JCEF folder -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-jcef-folder</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/app/jcef</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${jcef.dir}</directory>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- 3) Download JRE -->
+            <plugin>
+                <groupId>com.googlecode.maven-download-plugin</groupId>
+                <artifactId>download-maven-plugin</artifactId>
+                <version>1.13.0</version>
+                <executions>
+                    <execution>
+                        <id>download-jre</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>wget</goal>
+                        </goals>
+                        <configuration>
+                            <url>${jre.download.link.windows}</url>
+                            <unpack>true</unpack>
+                            <outputDirectory>${project.build.directory}/java</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- 4) Package with jpackage -->
+            <plugin>
+                <groupId>org.panteleyev</groupId>
+                <artifactId>jpackage-maven-plugin</artifactId>
+                <version>1.6.0</version>
+                <executions>
+                    <execution>
+                        <id>run-jpackage</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jpackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <name>${parent.artifactId}</name>
+                    <icon>${project.basedir}/../frontend/${icon.file.windows}</icon>
+                    <appVersion>${parent.version}</appVersion>
+                    <vendor>github.com</vendor>
+                    <type>APP_IMAGE</type>
+                    <runtimeImage>${project.build.directory}/java/${jre.root.folder.windows}</runtimeImage>
+                    <input>${project.build.directory}/app</input>
+                    <destination>${project.build.directory}/dist</destination>
+                    <mainJar>app.jar</mainJar>
+                    <mainClass>org.springframework.boot.loader.launch.JarLauncher</mainClass>
+                    <javaOptions>
+                        <option>--enable-preview</option>
+                        <option>-Dfile.encoding=UTF-8</option>
+                        <option>-Djava.library.path=app/jcef/bin/lib/win64</option>
+                    </javaOptions>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
