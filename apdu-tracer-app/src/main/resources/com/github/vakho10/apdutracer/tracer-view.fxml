@@ -4,17 +4,19 @@
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.ListView?>
 <?import javafx.scene.control.Menu?>
 <?import javafx.scene.control.MenuBar?>
 <?import javafx.scene.control.MenuItem?>
 <?import javafx.scene.control.SeparatorMenuItem?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
 <?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.input.KeyCodeCombination?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
-<?import org.kordamp.ikonli.javafx.FontIcon?>
 
-<VBox styleClass="vbox-root" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.github.vakho10.apdutracer.TracerController">
+<VBox xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.github.vakho10.apdutracer.TracerController">
    <children>
       <MenuBar>
         <menus>
@@ -43,36 +45,35 @@
                   <CheckBox fx:id="checkBoxBulk" mnemonicParsing="false" selected="true" text="Skip BULK Commands" />
                   <CheckBox fx:id="checkBoxUnknown" mnemonicParsing="false" selected="true" text="Skip Unknown Commands" />
                   <ComboBox fx:id="interfaceComboBox" maxWidth="1.7976931348623157E308" promptText="Select the interface..." HBox.hgrow="ALWAYS" />
-                  <Button minWidth="-Infinity" mnemonicParsing="false" onAction="#refreshInterfaces" prefWidth="100.0" text="Refresh">
-                     <graphic>
-                        <FontIcon iconLiteral="fa-refresh" />
-                     </graphic>
-                  </Button>
+                  <Button minWidth="-Infinity" mnemonicParsing="false" onAction="#refreshInterfaces" prefWidth="100.0" text="Refresh" />
                </children>
             </HBox>
-            <HBox alignment="CENTER_LEFT" spacing="10.0" />
-            <VBox VBox.vgrow="ALWAYS">
+            <HBox alignment="CENTER_LEFT" spacing="10.0" VBox.vgrow="ALWAYS">
                <children>
-                  <HBox fx:id="hbox" minHeight="150.0" VBox.vgrow="ALWAYS" />
-                  <HBox>
-                     <children>
-                        <ToggleButton fx:id="btnAutoScroll" maxWidth="1.7976931348623157E308" mnemonicParsing="false" selected="true" text="Auto Scroll" HBox.hgrow="ALWAYS">
-                           <graphic>
-                              <FontIcon iconLiteral="fa-list" />
-                           </graphic>
-                        </ToggleButton>
-                     </children>
-                  </HBox>
+                  <TabPane side="LEFT" tabClosingPolicy="UNAVAILABLE" HBox.hgrow="ALWAYS">
+                    <tabs>
+                      <Tab text="Modern">
+                           <content>
+                              <ListView fx:id="modernListView" />
+                           </content>
+                        </Tab>
+                      <Tab text="Textual">
+                           <content>
+                              <VBox fx:id="textualVBox" />
+                           </content></Tab>
+                    </tabs>
+                  </TabPane>
                </children>
-            </VBox>
+            </HBox>
+            <HBox>
+               <children>
+                  <ToggleButton fx:id="btnAutoScroll" maxWidth="1.7976931348623157E308" mnemonicParsing="false" selected="true" text="Auto Scroll" HBox.hgrow="ALWAYS" />
+               </children>
+            </HBox>
             <HBox alignment="CENTER_LEFT" spacing="10.0">
                <children>
                   <ToggleButton fx:id="btnStartStop" maxWidth="1.7976931348623157E308" minWidth="180.0" mnemonicParsing="false" onAction="#startStop" text="Start / Stop Tracing" HBox.hgrow="ALWAYS" />
-                  <Button fx:id="btnClear" minWidth="-Infinity" mnemonicParsing="false" onAction="#clear" prefWidth="180.0" text="Clear the Output">
-                     <graphic>
-                        <FontIcon iconLiteral="fa-eraser" />
-                     </graphic>
-                  </Button>
+                  <Button fx:id="btnClear" minWidth="-Infinity" mnemonicParsing="false" onAction="#clear" prefWidth="180.0" text="Clear the Output" />
                </children>
             </HBox>
          </children>

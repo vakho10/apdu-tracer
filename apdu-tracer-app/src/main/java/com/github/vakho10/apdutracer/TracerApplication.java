@@ -1,6 +1,5 @@
 package com.github.vakho10.apdutracer;
 
-import atlantafx.base.theme.NordLight;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
@@ -33,9 +32,6 @@ public class TracerApplication extends Application {
     @Override
     public void start(Stage stage) throws IOException {
         log.info("Called start(..) with primaryStage");
-
-        // find more themes in 'atlantafx.base.theme' package
-        Application.setUserAgentStylesheet(new NordLight().getUserAgentStylesheet());
 
         // Add application icon
         try (var logoInputStream = TracerApplication.class.getResourceAsStream("/logo/icon_32.png")) {

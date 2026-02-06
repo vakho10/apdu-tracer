@@ -1,7 +1,14 @@
 package com.github.vakho10.apdutracer.apdu;
 
+import javafx.geometry.Insets;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
+
 import java.util.Arrays;
 import java.util.HexFormat;
+
+import static com.github.vakho10.apdutracer.apdu.Utils.createFieldBlock;
 
 public class APDURequest {
 
@@ -155,6 +162,24 @@ public class APDURequest {
                 '}';
     }
 
+    public HBox toNode() {
+        // Format mandatory header fields
+        String claHex = String.format("%02X", cla);
+        String insHex = String.format("%02X", ins);
+        String p1Hex = String.format("%02X", p1);
+        String p2Hex = String.format("%02X", p2);
+
+        // Format optional fields (null check logic)
+        String lcHex = (lc != null) ? String.format("%02X", lc) : null;
+
+        // Data block: show hex only if data exists and isn't empty
+        String requestDataHex = (data != null && data.length > 0) ? getDataAsHexString().toUpperCase() : null;
+
+        String leHex = (le != null) ? String.format("%02X", le) : null;
+
+        return new Node(claHex, insHex, p1Hex, p2Hex, lcHex, requestDataHex, leHex);
+    }
+
     public enum Type {
         // SELECT variants
         SELECT_BY_FILE_ID,                // Select file by 2-byte File ID (FID)
@@ -271,6 +296,42 @@ public class APDURequest {
                 };
                 default -> UNKNOWN;
             };
+        }
+    }
+
+    public static class Node extends HBox {
+
+        public Node(String claHex, String insHex, String p1Hex, String p2Hex,
+                    String lcHex, String requestDataHex, String leHex) {
+
+            // 1. Setup the main HBox (The root container)
+            this.setSpacing(4.0);
+            this.setPadding(new Insets(8, 8, 8, 8));
+
+            // 2. Create the individual segments
+            getChildren().add(createFieldBlock("CLA", claHex, 24.0, false));
+            getChildren().add(createFieldBlock("INS", insHex, 24.0, false));
+            getChildren().add(createFieldBlock("P1", p1Hex, 24.0, false));
+            getChildren().add(createFieldBlock("P2", p2Hex, 24.0, false));
+
+            // Optional segments (may or may not exist)
+
+            // Command length
+            if (lcHex != null) {
+                getChildren().add(createFieldBlock("Lc", lcHex, 24.0, false));
+            }
+
+            // Command data
+            if (requestDataHex != null) {
+                VBox data = createFieldBlock("Command data", requestDataHex, null, true);
+                HBox.setHgrow(data, Priority.ALWAYS);
+                getChildren().add(data);
+            }
+
+            // Response bytes expected
+            if (leHex != null) {
+                getChildren().add(createFieldBlock("Le", leHex, 24.0, false));
+            }
         }
     }
 }

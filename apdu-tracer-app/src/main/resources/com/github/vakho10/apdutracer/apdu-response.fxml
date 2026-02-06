@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<HBox stylesheets="@style.css" spacing="4.0" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1">
+   <children>
+      <VBox spacing="2.0" HBox.hgrow="ALWAYS">
+         <children>
+            <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="Response data" />
+            <TextField alignment="CENTER" editable="false" prefWidth="24.0" styleClass="textify" text="0AB0FFFF040615921823FF00" />
+         </children>
+      </VBox>
+      <VBox spacing="2.0">
+         <children>
+            <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="Status" />
+            <TextField alignment="CENTER" editable="false" prefWidth="48.0" styleClass="textify" text="9000" />
+         </children>
+      </VBox>
+   </children>
+   <padding>
+      <Insets bottom="4.0" left="4.0" right="4.0" top="4.0" />
+   </padding>
+</HBox>

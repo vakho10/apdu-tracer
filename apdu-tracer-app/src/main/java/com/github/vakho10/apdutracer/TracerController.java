@@ -5,13 +5,16 @@ import com.github.vakho10.apdutracer.apdu.APDUResponse;
 import com.github.vakho10.apdutracer.apdu.CommandType;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
+import javafx.fxml.FXMLLoader;
 import javafx.fxml.Initializable;
-import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
-import javafx.scene.control.ComboBox;
-import javafx.scene.control.ToggleButton;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
+import javafx.scene.text.Text;
+import javafx.scene.text.TextAlignment;
 import javafx.stage.FileChooser;
 import javafx.stage.FileChooser.ExtensionFilter;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +37,7 @@ import java.util.StringJoiner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @Component
@@ -44,7 +48,8 @@ public class TracerController extends AbstractController implements Initializabl
     public ComboBox<String> interfaceComboBox;
     public CheckBox checkBoxBulk;
     public CheckBox checkBoxUnknown;
-    public HBox hbox;
+    public ListView<Object> modernListView; // Modern container
+    public VBox textualVBox; // Textual container
     public ToggleButton btnAutoScroll;
     public ToggleButton btnStartStop;
     public Button btnClear;
@@ -55,6 +60,7 @@ public class TracerController extends AbstractController implements Initializabl
     private VirtualizedScrollPane<CodeArea> vsPane;
 
     private FileChooser fileChooser;
+    private FXMLLoader fxmlLoader;
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
@@ -73,12 +79,61 @@ public class TracerController extends AbstractController implements Initializabl
         codeArea.setEditable(false);
         vsPane = new VirtualizedScrollPane<>(codeArea);
         codeArea.getStyleClass().add("vs-pane");
-        HBox.setHgrow(vsPane, Priority.ALWAYS);
-        hbox.getChildren().add(vsPane);
+        VBox.setVgrow(vsPane, Priority.ALWAYS);
+        textualVBox.getChildren().add(vsPane);
 
         // File chooser
         fileChooser = new FileChooser();
         fileChooser.getExtensionFilters().addAll(new ExtensionFilter("Text Files", "*.txt"));
+
+        // We'll use this to dynamically construct elements
+        fxmlLoader = new FXMLLoader();
+
+        // This disables the ability to select items entirely
+        modernListView.setSelectionModel(new NoSelectionModel<>());
+
+        // Render list view items
+        modernListView.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(Object item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setGraphic(null);
+                } else {
+                    // See if we have atomic object
+                    if (item instanceof AtomicReference<?> atomicReference) {
+                        item = atomicReference.get();
+                    }
+
+                    // Construct specific node (APDU request or response)
+                    if (item instanceof APDURequest request) {
+                        var node = request.toNode();
+                        node.setStyle("-fx-background-color: lightblue;");
+                        setGraphic(node);
+                    } else if (item instanceof APDUResponse response) {
+                        var node = response.toNode();
+                        node.setStyle("-fx-background-color: lightgreen;");
+                        setGraphic(node);
+                    } else if (item instanceof String itemText) {
+                        var container = new HBox();
+                        container.setSpacing(4.0);
+                        container.setPadding(new Insets(8, 8, 8, 8));
+                        container.setStyle("-fx-background-color: black;");
+                        Text text = new Text(itemText);
+                        text.setTextAlignment(TextAlignment.CENTER);
+                        text.maxWidth(Double.MAX_VALUE);
+                        text.setStyle("-fx-fill: white;");
+                        HBox.setHgrow(text, Priority.ALWAYS);
+                        container.getChildren().add(text);
+                        setGraphic(container);
+                    } else {
+                        Text errorText = new Text("Can't display the node!");
+                        errorText.setStyle("-fx-fill: red;");
+                        setGraphic(errorText);
+                    }
+                }
+            }
+        });
     }
 
     public void startStop(ActionEvent event) {
@@ -91,6 +146,7 @@ public class TracerController extends AbstractController implements Initializabl
     }
 
     public void clear() {
+        modernListView.getItems().clear();
         codeArea.clear();
     }
 
@@ -168,6 +224,9 @@ public class TracerController extends AbstractController implements Initializabl
             return;
         }
 
+        var time = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss.SSS"));
+
+        final AtomicReference<Object> commandObject = new AtomicReference<>(commandType.name());
         StringJoiner sj = new StringJoiner("] [", "[", "]");
         sj.add(commandType.name());
         if (values.length > 1) {
@@ -187,6 +246,7 @@ public class TracerController extends AbstractController implements Initializabl
                             || apduRequestType.equals(APDURequest.Type.SELECT_CHILD_DF_BY_ID)) {
                         sj.add(apduRequest.getDataAsHexString().toUpperCase());
                     }
+                    commandObject.set(apduRequest);
                     break;
                 case DATA_BLOCK:
                     sj.add("APDU_RESPONSE");
@@ -195,18 +255,28 @@ public class TracerController extends AbstractController implements Initializabl
                         sj.add(apduResponse.getDataAsHexString().toUpperCase());
                     }
                     sj.add(apduResponse.getSwAsHexString().toUpperCase());
+                    commandObject.set(apduResponse);
                     break;
                 default:
                     sj.add(commandType.name());
                     for (String value : values) {
                         sj.add(value);
                     }
+                    commandObject.set(sj.toString());
                     break;
             }
         }
 
-        var time = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss.SSS"));
         Platform.runLater(() -> {
+            // Modern
+            modernListView.getItems().add(commandObject);
+
+            // Auto-scroll logic is built-in to ListView
+            if (btnAutoScroll.isSelected()) {
+                modernListView.scrollTo(modernListView.getItems().size() - 1);
+            }
+
+            // Textual
             int start = codeArea.getLength();
             codeArea.appendText(String.format("[%s] %s\n", time, sj));
             int end = codeArea.getLength();
@@ -216,6 +286,7 @@ public class TracerController extends AbstractController implements Initializabl
 
             // Check if we should auto-scroll to the end
             if (btnAutoScroll.isSelected()) {
+                // Textual
                 codeArea.moveTo(codeArea.getLength());
                 codeArea.requestFollowCaret();
             }
