@@ -1,14 +1,13 @@
-package com.github.vakho10.apdutracer.apdu;
+package com.github.vakho10.apdutracer.apdu.request;
 
-import javafx.geometry.Insets;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.VBox;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Node;
+import javafx.scene.Parent;
 
+import java.io.IOException;
+import java.net.URL;
 import java.util.Arrays;
 import java.util.HexFormat;
-
-import static com.github.vakho10.apdutracer.apdu.Utils.createFieldBlock;
 
 public class APDURequest {
 
@@ -162,7 +161,7 @@ public class APDURequest {
                 '}';
     }
 
-    public HBox toNode() {
+    public synchronized Node toNode() {
         // Format mandatory header fields
         String claHex = String.format("%02X", cla);
         String insHex = String.format("%02X", ins);
@@ -177,7 +176,22 @@ public class APDURequest {
 
         String leHex = (le != null) ? String.format("%02X", le) : null;
 
-        return new Node(claHex, insHex, p1Hex, p2Hex, lcHex, requestDataHex, leHex);
+        try {
+            URL url = APDURequest.class.getResource("view.fxml");
+            FXMLLoader fxmlLoader = new FXMLLoader(url);
+            Parent parent = fxmlLoader.load();
+            Controller controller = fxmlLoader.getController();
+            controller.setCLA(claHex);
+            controller.setINS(insHex);
+            controller.setP1(p1Hex);
+            controller.setP2(p2Hex);
+            controller.setLc(lcHex);
+            controller.setRequestData(requestDataHex);
+            controller.setLe(leHex);
+            return parent;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public enum Type {
@@ -296,42 +310,6 @@ public class APDURequest {
                 };
                 default -> UNKNOWN;
             };
-        }
-    }
-
-    public static class Node extends HBox {
-
-        public Node(String claHex, String insHex, String p1Hex, String p2Hex,
-                    String lcHex, String requestDataHex, String leHex) {
-
-            // 1. Setup the main HBox (The root container)
-            this.setSpacing(4.0);
-            this.setPadding(new Insets(8, 8, 8, 8));
-
-            // 2. Create the individual segments
-            getChildren().add(createFieldBlock("CLA", claHex, 24.0, false));
-            getChildren().add(createFieldBlock("INS", insHex, 24.0, false));
-            getChildren().add(createFieldBlock("P1", p1Hex, 24.0, false));
-            getChildren().add(createFieldBlock("P2", p2Hex, 24.0, false));
-
-            // Optional segments (may or may not exist)
-
-            // Command length
-            if (lcHex != null) {
-                getChildren().add(createFieldBlock("Lc", lcHex, 24.0, false));
-            }
-
-            // Command data
-            if (requestDataHex != null) {
-                VBox data = createFieldBlock("Command data", requestDataHex, null, true);
-                HBox.setHgrow(data, Priority.ALWAYS);
-                getChildren().add(data);
-            }
-
-            // Response bytes expected
-            if (leHex != null) {
-                getChildren().add(createFieldBlock("Le", leHex, 24.0, false));
-            }
         }
     }
 }

@@ -1,25 +1,24 @@
 package com.github.vakho10.apdutracer;
 
-import com.github.vakho10.apdutracer.apdu.APDURequest;
-import com.github.vakho10.apdutracer.apdu.APDUResponse;
 import com.github.vakho10.apdutracer.apdu.CommandType;
+import com.github.vakho10.apdutracer.apdu.request.APDURequest;
+import com.github.vakho10.apdutracer.apdu.response.APDUResponse;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
-import javafx.fxml.FXMLLoader;
 import javafx.fxml.Initializable;
 import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 import javafx.stage.FileChooser;
 import javafx.stage.FileChooser.ExtensionFilter;
+import jfx.incubator.scene.control.richtext.RichTextArea;
+import jfx.incubator.scene.control.richtext.model.StyleAttributeMap;
 import lombok.extern.slf4j.Slf4j;
-import org.fxmisc.flowless.VirtualizedScrollPane;
-import org.fxmisc.richtext.CodeArea;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
@@ -56,11 +55,9 @@ public class TracerController extends AbstractController implements Initializabl
 
     private TracerService tracerService;
 
-    private CodeArea codeArea;
-    private VirtualizedScrollPane<CodeArea> vsPane;
+    private RichTextArea richTextArea;
 
     private FileChooser fileChooser;
-    private FXMLLoader fxmlLoader;
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
@@ -74,20 +71,15 @@ public class TracerController extends AbstractController implements Initializabl
             tracerService.setInterfaceName(interfaceComboBox.getValue());
         });
 
-        // Code area and scroll pane
-        codeArea = new CodeArea();
-        codeArea.setEditable(false);
-        vsPane = new VirtualizedScrollPane<>(codeArea);
-        codeArea.getStyleClass().add("vs-pane");
-        VBox.setVgrow(vsPane, Priority.ALWAYS);
-        textualVBox.getChildren().add(vsPane);
+        // RichTextArea setup
+        richTextArea = new RichTextArea();
+        richTextArea.setEditable(false);
+        VBox.setVgrow(richTextArea, Priority.ALWAYS);
+        textualVBox.getChildren().add(richTextArea);
 
         // File chooser
         fileChooser = new FileChooser();
         fileChooser.getExtensionFilters().addAll(new ExtensionFilter("Text Files", "*.txt"));
-
-        // We'll use this to dynamically construct elements
-        fxmlLoader = new FXMLLoader();
 
         // This disables the ability to select items entirely
         modernListView.setSelectionModel(new NoSelectionModel<>());
@@ -147,7 +139,7 @@ public class TracerController extends AbstractController implements Initializabl
 
     public void clear() {
         modernListView.getItems().clear();
-        codeArea.clear();
+        richTextArea.clear();
     }
 
     public void refreshInterfaces() {
@@ -197,7 +189,7 @@ public class TracerController extends AbstractController implements Initializabl
     public void saveToFile() throws IOException {
         File file = fileChooser.showSaveDialog(stage);
         if (file != null) {
-            Files.writeString(file.toPath(), codeArea.getText());
+            Files.writeString(file.toPath(), getAllRichText());
         }
     }
 
@@ -277,28 +269,40 @@ public class TracerController extends AbstractController implements Initializabl
             }
 
             // Textual
-            int start = codeArea.getLength();
-            codeArea.appendText(String.format("[%s] %s\n", time, sj));
-            int end = codeArea.getLength();
+            // 1. Prepare the text
+            String logEntry = String.format("[%s] %s\n", time, sj);
 
-            String style = determineStyle(commandType);
-            codeArea.setStyle(start, end, List.of(style));
+            // 2. Get the style map (using the helper we discussed earlier)
+            StyleAttributeMap richStyle = determineStyle(commandType);
 
-            // Check if we should auto-scroll to the end
+            // 3. Append text and style in one shot
+            richTextArea.appendText(logEntry, richStyle);
+
+            // 4. Auto-scroll logic
             if (btnAutoScroll.isSelected()) {
-                // Textual
-                codeArea.moveTo(codeArea.getLength());
-                codeArea.requestFollowCaret();
+                richTextArea.select(richTextArea.getDocumentEnd());
             }
         });
     }
 
-    private String determineStyle(CommandType commandType) {
-        return switch (commandType) {
-            case TRANSFER_BLOCK -> "apdu-request";
-            case DATA_BLOCK -> "apdu-response";
-            case UNKNOWN -> "unknown";
-            default -> "default";
-        };
+    private StyleAttributeMap determineStyle(CommandType commandType) {
+        var builder = StyleAttributeMap.builder();
+        switch (commandType) {
+            case TRANSFER_BLOCK -> builder.setTextColor(Color.CORNFLOWERBLUE);
+            case DATA_BLOCK -> builder.setTextColor(Color.LIMEGREEN);
+            case UNKNOWN -> builder.setTextColor(Color.ORANGERED);
+            default -> builder.setTextColor(Color.BLACK);
+        }
+        return builder.build();
+    }
+
+    private String getAllRichText() {
+        StringBuilder sb = new StringBuilder();
+        int count = richTextArea.getParagraphCount();
+        for (int i = 0; i < count; i++) {
+            sb.append(richTextArea.getPlainText(i));
+            sb.append("\n");
+        }
+        return sb.toString();
     }
 }

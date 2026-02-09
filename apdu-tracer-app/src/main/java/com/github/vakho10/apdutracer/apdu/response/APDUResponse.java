@@ -1,14 +1,13 @@
-package com.github.vakho10.apdutracer.apdu;
+package com.github.vakho10.apdutracer.apdu.response;
 
-import javafx.geometry.Insets;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.VBox;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Node;
+import javafx.scene.Parent;
 
+import java.io.IOException;
+import java.net.URL;
 import java.util.Arrays;
 import java.util.HexFormat;
-
-import static com.github.vakho10.apdutracer.apdu.Utils.createFieldBlock;
 
 public class APDUResponse {
 
@@ -63,33 +62,23 @@ public class APDUResponse {
                 '}';
     }
 
-    public HBox toNode() {
+    public Node toNode() {
         // Convert data array to hex, or use empty string if no data is returned
-        String dataHex = (data != null && data.length > 0) ? getDataAsHexString().toUpperCase() : "";
+        String responseDataHex = (data != null && data.length > 0) ? getDataAsHexString().toUpperCase() : "";
 
         // Get the 4-character status word (e.g., "9000")
         String statusHex = getSwAsHexString().toUpperCase();
 
-        return new Node(dataHex, statusHex);
-    }
-
-    public class Node extends HBox {
-
-        public Node(String dataHex, String statusHex) {
-
-            // 1. Setup the main HBox (The root container)
-            this.setSpacing(4.0);
-            this.setPadding(new Insets(8, 8, 8, 8));
-
-            // 2. Create the Response Data segment (HGrow ALWAYS)
-            VBox dataBlock = createFieldBlock("Response data", dataHex, null, true);
-            HBox.setHgrow(dataBlock, Priority.ALWAYS);
-
-            // 3. Create the Status segment (Fixed width for 4-character hex like '9000')
-            VBox statusBlock = createFieldBlock("Status", statusHex, 48.0, false);
-
-            // 4. Add children
-            this.getChildren().addAll(dataBlock, statusBlock);
+        try {
+            URL url = APDUResponse.class.getResource("view.fxml");
+            FXMLLoader fxmlLoader = new FXMLLoader(url);
+            Parent parent = fxmlLoader.load();
+            Controller controller = fxmlLoader.getController();
+            controller.setResponseData(responseDataHex);
+            controller.setStatus(statusHex);
+            return parent;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 }
