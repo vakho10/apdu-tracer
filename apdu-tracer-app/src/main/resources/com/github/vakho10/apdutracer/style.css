@@ -43,3 +43,17 @@
     -fx-background-color: #0078d7;
     -fx-text-fill: white;
 }
+
+/* 1. Give the list itself a bottom border */
+.list-view {
+    -fx-border-color: black;
+    -fx-border-width: 0 0 1 0; /* Only bottom */
+    -fx-background-color: transparent; /* Prevents default grey backgrounds */
+}
+
+/* 2. Give every cell a top border */
+.list-cell {
+    -fx-border-color: black;
+    -fx-border-width: 1 1 0 1; /* Only top */
+    -fx-background-color: white;
+}

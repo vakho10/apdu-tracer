@@ -2,15 +2,3 @@
 .apdu-response .text-field {
     -fx-background-color: white; -fx-background-insets: 0; -fx-padding: 0;
 }
-
-.apdu-response {
-    -fx-border-color: black;
-    -fx-border-width: 0 1 1 1;
-    -fx-border-style: solid;
-}
-
-.apdu-request {
-    -fx-border-color: black;
-    -fx-border-width: 1 1 0 1;
-    -fx-border-style: solid;
-}
