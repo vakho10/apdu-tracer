@@ -100,21 +100,21 @@ public class TracerController extends AbstractController implements Initializabl
                     // Construct specific node (APDU request or response)
                     if (item instanceof APDURequest request) {
                         var node = request.toNode();
-                        node.setStyle("-fx-background-color: lightblue;");
+                        node.setStyle("-fx-background-color: #c4eefb;");
                         setGraphic(node);
                     } else if (item instanceof APDUResponse response) {
                         var node = response.toNode();
-                        node.setStyle("-fx-background-color: lightgreen;");
+                        node.setStyle("-fx-background-color: #cef3ce;");
                         setGraphic(node);
                     } else if (item instanceof String itemText) {
                         var container = new HBox();
                         container.setSpacing(4.0);
                         container.setPadding(new Insets(8, 8, 8, 8));
-                        container.setStyle("-fx-background-color: black;");
+                        container.setStyle("-fx-background-color: #cef3ce;");
                         Text text = new Text(itemText);
                         text.setTextAlignment(TextAlignment.CENTER);
                         text.maxWidth(Double.MAX_VALUE);
-                        text.setStyle("-fx-fill: white;");
+                        text.setStyle("-fx-fill: black;");
                         HBox.setHgrow(text, Priority.ALWAYS);
                         container.getChildren().add(text);
                         setGraphic(container);

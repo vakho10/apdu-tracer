@@ -1,19 +1,35 @@
 package com.github.vakho10.apdutracer.apdu.request;
 
 import javafx.fxml.Initializable;
+import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
+import javafx.scene.layout.VBox;
 
 import java.net.URL;
 import java.util.ResourceBundle;
 
 public class Controller implements Initializable {
+
+    // Required fields
+    public Label labelType;
     public TextField fieldCLA;
     public TextField fieldINS;
     public TextField fieldP1;
     public TextField fieldP2;
+
+    // Optional fields
     public TextField fieldLc;
+    public VBox vboxLc;
+
     public TextField fieldRequestData;
+    public VBox vboxRequestData;
+
     public TextField fieldLe;
+    public VBox vboxLe;
+
+    public void setType(String type) {
+        labelType.setText(type);
+    }
 
     public void setCLA(String value) {
         fieldCLA.setText(value);
@@ -33,24 +49,24 @@ public class Controller implements Initializable {
 
     public void setLc(String value) {
         fieldLc.setText(value);
-        fieldLc.setVisible(value != null);
+        vboxLc.setVisible(value != null);
     }
 
     public void setRequestData(String value) {
         fieldRequestData.setText(value);
-        fieldRequestData.setVisible(value != null);
+        vboxRequestData.setVisible(value != null);
     }
 
     public void setLe(String value) {
         fieldLe.setText(value);
-        fieldRequestData.setVisible(value != null);
+        vboxLe.setVisible(value != null);
     }
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
         // Bind them so they always match
-        fieldLc.managedProperty().bind(fieldLc.visibleProperty());
-        fieldRequestData.managedProperty().bind(fieldRequestData.visibleProperty());
-        fieldLe.managedProperty().bind(fieldLe.visibleProperty());
+        vboxLc.managedProperty().bind(vboxLc.visibleProperty());
+        vboxRequestData.managedProperty().bind(vboxRequestData.visibleProperty());
+        vboxLe.managedProperty().bind(vboxLe.visibleProperty());
     }
 }

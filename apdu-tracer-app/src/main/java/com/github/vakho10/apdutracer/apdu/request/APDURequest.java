@@ -181,6 +181,7 @@ public class APDURequest {
             FXMLLoader fxmlLoader = new FXMLLoader(url);
             Parent parent = fxmlLoader.load();
             Controller controller = fxmlLoader.getController();
+            controller.setType(type.name());
             controller.setCLA(claHex);
             controller.setINS(insHex);
             controller.setP1(p1Hex);

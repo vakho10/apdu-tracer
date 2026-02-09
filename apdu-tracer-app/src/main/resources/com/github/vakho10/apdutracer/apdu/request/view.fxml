@@ -6,52 +6,57 @@
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
 
-<HBox spacing="4.0" stylesheets="@../style.css" styleClass="apdu-request" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.github.vakho10.apdutracer.apdu.request.Controller">
+<VBox spacing="4.0" stylesheets="@../style.css" styleClass="apdu-request" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.github.vakho10.apdutracer.apdu.request.Controller">
    <children>
-      <VBox spacing="2.0">
+      <Label fx:id="labelType" style="-fx-font-weight: bold;" text="Unknown" />
+      <HBox spacing="4.0">
          <children>
-            <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="CLA" />
-            <TextField fx:id="fieldCLA" alignment="CENTER" editable="false" prefWidth="24.0" />
+            <VBox spacing="2.0">
+               <children>
+                  <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="CLA" />
+                  <TextField fx:id="fieldCLA" alignment="CENTER" editable="false" prefWidth="28.0" />
+               </children>
+            </VBox>
+            <VBox spacing="2.0">
+               <children>
+                  <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="INS" />
+                  <TextField fx:id="fieldINS" alignment="CENTER" editable="false" prefWidth="28.0" />
+               </children>
+            </VBox>
+            <VBox spacing="2.0">
+               <children>
+                  <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="P1" />
+                  <TextField fx:id="fieldP1" alignment="CENTER" editable="false" prefWidth="28.0" />
+               </children>
+            </VBox>
+            <VBox spacing="2.0">
+               <children>
+                  <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="P2" />
+                  <TextField fx:id="fieldP2" alignment="CENTER" editable="false" prefWidth="28.0" />
+               </children>
+            </VBox>
+            <VBox fx:id="vboxLc" spacing="2.0">
+               <children>
+                  <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="Lc" />
+                  <TextField fx:id="fieldLc" alignment="CENTER" editable="false" prefWidth="28.0" />
+               </children>
+            </VBox>
+            <VBox fx:id="vboxRequestData" spacing="2.0" HBox.hgrow="ALWAYS">
+               <children>
+                  <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="Request data" />
+                  <TextField fx:id="fieldRequestData" alignment="CENTER" editable="false" VBox.vgrow="ALWAYS" />
+               </children>
+            </VBox>
+            <VBox fx:id="vboxLe" spacing="2.0">
+               <children>
+                  <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="Le" />
+                  <TextField fx:id="fieldLe" alignment="CENTER" editable="false" prefWidth="28.0" />
+               </children>
+            </VBox>
          </children>
-      </VBox>
-      <VBox spacing="2.0">
-         <children>
-            <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="INS" />
-            <TextField fx:id="fieldINS" alignment="CENTER" editable="false" prefWidth="24.0" />
-         </children>
-      </VBox>
-      <VBox spacing="2.0">
-         <children>
-            <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="P1" />
-            <TextField fx:id="fieldP1" alignment="CENTER" editable="false" prefWidth="24.0" />
-         </children>
-      </VBox>
-      <VBox spacing="2.0">
-         <children>
-            <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="P2" />
-            <TextField fx:id="fieldP2" alignment="CENTER" editable="false" prefWidth="24.0" />
-         </children>
-      </VBox>
-      <VBox spacing="2.0">
-         <children>
-            <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="Lc" />
-            <TextField fx:id="fieldLc" alignment="CENTER" editable="false" prefWidth="24.0" />
-         </children>
-      </VBox>
-      <VBox spacing="2.0" HBox.hgrow="ALWAYS">
-         <children>
-            <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="Request data" />
-            <TextField fx:id="fieldRequestData" alignment="CENTER" editable="false" prefWidth="24.0" />
-         </children>
-      </VBox>
-      <VBox spacing="2.0">
-         <children>
-            <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text="Le" />
-            <TextField fx:id="fieldLe" alignment="CENTER" editable="false" prefWidth="24.0" />
-         </children>
-      </VBox>
+      </HBox>
    </children>
    <padding>
       <Insets bottom="8.0" left="8.0" right="8.0" top="8.0" />
    </padding>
-</HBox>
+</VBox>
