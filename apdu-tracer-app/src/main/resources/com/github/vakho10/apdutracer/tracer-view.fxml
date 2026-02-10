@@ -54,7 +54,7 @@
                     <tabs>
                       <Tab text="Modern">
                            <content>
-                              <ListView fx:id="modernListView" />
+                              <ListView fx:id="modernListView" styleClass="modern-list" />
                            </content>
                         </Tab>
                       <Tab text="Textual">

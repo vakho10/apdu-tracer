@@ -45,14 +45,14 @@
 }
 
 /* 1. Give the list itself a bottom border */
-.list-view {
+.modern-list.list-view {
     -fx-border-color: black;
     -fx-border-width: 0 0 1 0; /* Only bottom */
     -fx-background-color: transparent; /* Prevents default grey backgrounds */
 }
 
 /* 2. Give every cell a top border */
-.list-cell {
+.modern-list .list-cell {
     -fx-border-color: black;
     -fx-border-width: 1 1 0 1; /* Only top */
     -fx-background-color: white;
