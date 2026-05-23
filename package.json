@@ -1,0 +1,23 @@
+{
+  "name": "apdu-tracer",
+  "version": "1.0.0",
+  "description": "Trace APDUs sent to and received from a smart card reader via tshark / USBPcap",
+  "main": "./out/main/index.js",
+  "author": "Vakho",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "build:win": "electron-vite build && electron-builder --win"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.7.0",
+    "vite": "^5.4.0"
+  }
+}

@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'"
+    />
+    <title>APDU Tracer</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <header>
+      <label for="interface">USBPcap interface</label>
+      <select id="interface" aria-label="USBPcap capture interface"></select>
+      <button id="refresh" type="button">Refresh</button>
+      <button id="tshark-path" type="button" hidden>Locate tshark…</button>
+      <button id="open-file" type="button">Open file…</button>
+      <select id="theme" aria-label="Color theme">
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </header>
+
+    <main>
+      <div class="toolbar">
+        <nav class="tabs" role="tablist" aria-label="APDU views">
+          <button
+            class="tab"
+            id="tab-simple"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="view-simple"
+          >
+            Simple
+          </button>
+          <button
+            class="tab"
+            id="tab-detailed"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="view-detailed"
+          >
+            Detailed
+          </button>
+          <button
+            class="tab"
+            id="tab-summary"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="view-summary"
+          >
+            Summary
+          </button>
+          <button
+            class="tab"
+            id="tab-decode"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="view-decode"
+          >
+            Decode
+          </button>
+        </nav>
+        <span id="counter" class="counter">Cmd 0 · Rsp 0</span>
+        <button id="import" type="button">Import</button>
+        <button id="clear" type="button" disabled>Clear</button>
+        <button id="save" type="button" disabled>Save trace</button>
+      </div>
+
+      <div class="filterbar">
+        <input
+          id="search"
+          type="search"
+          spellcheck="false"
+          placeholder="Filter by hex, instruction, or status…"
+          aria-label="Filter APDUs"
+        />
+        <select id="filter-direction" aria-label="Filter by direction">
+          <option value="all">All</option>
+          <option value="command">Commands</option>
+          <option value="response">Responses</option>
+        </select>
+        <label class="switch">
+          <input type="checkbox" id="filter-issues" />
+          <span class="switch-slider" aria-hidden="true"></span>
+          Issues only
+        </label>
+        <select id="tlv-profile" aria-label="TLV decoding profile">
+          <option value="auto">Auto profile</option>
+          <option value="iso">ISO 7816-4</option>
+          <option value="emv">EMV</option>
+          <option value="piv">PIV</option>
+          <option value="openpgp">OpenPGP</option>
+        </select>
+        <span id="filter-count" class="filter-count" hidden></span>
+      </div>
+
+      <section class="panel" id="view-simple" role="tabpanel" aria-labelledby="tab-simple">
+        <textarea
+          id="output"
+          readonly
+          spellcheck="false"
+          placeholder="Captured APDUs will appear here, one per line…"
+        ></textarea>
+      </section>
+
+      <section class="panel" id="view-detailed" role="tabpanel" aria-labelledby="tab-detailed" hidden>
+        <div id="cards"></div>
+      </section>
+
+      <section class="panel" id="view-summary" role="tabpanel" aria-labelledby="tab-summary" hidden>
+        <div id="summary"></div>
+      </section>
+
+      <section class="panel" id="view-decode" role="tabpanel" aria-labelledby="tab-decode" hidden>
+        <div id="decode">
+          <div class="decode-kind" role="radiogroup" aria-label="APDU kind">
+            <label>
+              <input type="radio" name="decode-kind" id="decode-command" checked />
+              Command
+            </label>
+            <label>
+              <input type="radio" name="decode-kind" id="decode-response" />
+              Response
+            </label>
+          </div>
+          <textarea
+            id="decode-input"
+            spellcheck="false"
+            placeholder="Paste APDU hex, e.g. 00 A4 04 00 07 A0 00 00 00 03 10 10"
+          ></textarea>
+          <div id="decode-result"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <output id="status" data-kind="info">Idle</output>
+      <label class="switch">
+        <input type="checkbox" id="autoscroll" />
+        <span class="switch-slider" aria-hidden="true"></span>
+        Auto-scroll
+      </label>
+      <button id="toggle" type="button">Start tracing</button>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+appId: com.vakho.apdu-tracer
+productName: APDU Tracer
+directories:
+  output: release
+files:
+  - out/**/*
+  - package.json
+win:
+  target: nsis
