@@ -35,6 +35,12 @@ function preloadPath(): string {
   return existsSync(mjs) ? mjs : join(__dirname, '../preload/index.js')
 }
 
+function iconPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'icon.png')
+    : join(__dirname, '../../build/icon.png')
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 760,
@@ -42,6 +48,7 @@ function createWindow(): void {
     minWidth: 480,
     minHeight: 360,
     title: 'APDU Tracer',
+    icon: iconPath(),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#1e1e2e' : '#f5f5f7',
     webPreferences: {
       preload: preloadPath(),

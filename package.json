@@ -1,6 +1,6 @@
 {
   "name": "apdu-tracer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Trace APDUs sent to and received from a smart card reader via tshark / USBPcap",
   "main": "./out/main/index.js",
   "author": "Vakho",
