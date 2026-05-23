@@ -186,6 +186,27 @@ src/
     src/main.ts         UI logic — views, filter, summary, decode, IPC handlers
 ```
 
+## Releases
+
+Tagged versions are built by the [`Release`](.github/workflows/release.yml)
+GitHub Actions workflow on `windows-latest` and published to the
+[Releases page](https://github.com/vakho10/apdu-tracer/releases) with the
+NSIS installer (`.exe`), its `.blockmap` and `latest.yml` attached.
+
+To cut a new release:
+
+1. Bump `version` in `package.json` and commit.
+2. Tag the commit `vX.Y.Z` (matching the `package.json` version) and push
+   the tag:
+
+   ```bash
+   git tag -a v1.0.1 -m "Release v1.0.1"
+   git push origin v1.0.1
+   ```
+
+Any tag matching `v*` triggers the workflow; release notes are
+auto-generated from commits since the previous tag.
+
 ## Troubleshooting
 
 - **No USBPcap interfaces listed** — USBPcap is not installed, or the machine
