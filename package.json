@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "changelog": "npx --yes git-cliff -o CHANGELOG.md",
     "build:win": "electron-vite build && electron-builder --win --publish never"
   },
   "devDependencies": {

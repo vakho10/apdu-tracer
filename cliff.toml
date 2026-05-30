@@ -1,0 +1,50 @@
+# git-cliff configuration — https://git-cliff.org
+# The CHANGELOG and the per-release GitHub notes are generated from the commit
+# history. Conventional Commit prefixes (feat:, fix:, docs:, …) are matched
+# first; the prose fallbacks below keep the older, pre-convention commits tidy.
+
+[changelog]
+header = '''
+# Changelog
+
+All notable changes to this project are documented in this file.
+'''
+body = '''
+
+{% if version %}## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}{% else %}## [Unreleased]{% endif %}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | upper_first }}
+
+{% for commit in commits %}- {{ commit.message | split(pat="\n") | first | trim | upper_first }}
+{% endfor %}{% endfor %}'''
+footer = ''
+trim = true
+
+[git]
+# Match on the raw subject via commit_parsers rather than the strict
+# Conventional Commits grammar — the prose fallbacks need the raw message, and
+# the regexes below still pick up feat:/fix:/docs: prefixes when present.
+conventional_commits = false
+filter_unconventional = false
+split_commits = false
+# First matching rule wins. Conventional prefixes first, then prose verbs.
+commit_parsers = [
+  { message = "(?i)^merge ", skip = true },
+  { message = "(?i)^first commit$", skip = true },
+  { message = "(?i)^release v?[0-9]", skip = true },
+  { message = "(?i)^feat", group = "Features" },
+  { message = "(?i)^fix", group = "Bug Fixes" },
+  { message = "(?i)^perf", group = "Performance" },
+  { message = "(?i)^refactor", group = "Refactor" },
+  { message = "(?i)^docs?", group = "Documentation" },
+  { message = "(?i)^test", group = "Testing" },
+  { message = "(?i)^(chore|ci|build)", group = "Miscellaneous" },
+  { message = "(?i)^(add|implement|introduce|enable|support|create)", group = "Features" },
+  { message = "(?i)^(correct|resolve|prevent|stop|avoid)", group = "Bug Fixes" },
+  { message = "(?i)^(split|maintain|move|rename|extract|simplify)", group = "Refactor" },
+  { message = "(?i)(readme|changelog|^document)", group = "Documentation" },
+  { message = "(?i)^(pin|bump|update|configure|remove|drop)", group = "Miscellaneous" },
+  { message = ".*", group = "Other" },
+]
+filter_commits = false
+sort_commits = "oldest"

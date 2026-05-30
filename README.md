@@ -217,8 +217,17 @@ To cut a new release:
    git push origin v1.0.1
    ```
 
-Any tag matching `v*` triggers the workflow; release notes are
-auto-generated from commits since the previous tag.
+Any tag matching `v*` triggers the workflow. The release notes are generated
+from the commit messages since the previous tag by
+[git-cliff](https://git-cliff.org) (configured in
+[`cliff.toml`](cliff.toml)) and used as the release body — no hand-written
+notes required. Commits are grouped into sections (Features, Bug Fixes,
+Refactor, …) by their subject; using [Conventional Commit](https://www.conventionalcommits.org/)
+prefixes (`feat:`, `fix:`, `docs:`, …) makes that grouping exact, but plain
+prose subjects are categorised on a best-effort basis too.
+
+Run `npm run changelog` to regenerate the project-wide
+[`CHANGELOG.md`](CHANGELOG.md) locally.
 
 ## Troubleshooting
 
