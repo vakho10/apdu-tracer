@@ -1,0 +1,8 @@
+# Store every text file with LF in the repo, regardless of the contributor's
+# platform. This keeps diffs clean and silences core.autocrlf warnings on
+# Windows checkouts; the build and editors handle LF fine.
+* text=auto eol=lf
+
+# Binary assets must never be line-ending converted.
+*.png binary
+*.ico binary
