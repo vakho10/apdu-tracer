@@ -19,11 +19,11 @@
   --ok: light-dark(#1a7f37, #a6e3a1);
   --border: light-dark(rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0.4));
 
-  &[data-theme="light"] {
+  &[data-theme='light'] {
     color-scheme: light;
   }
 
-  &[data-theme="dark"] {
+  &[data-theme='dark'] {
     color-scheme: dark;
   }
 }
@@ -36,7 +36,7 @@ body {
 body {
   display: flex;
   flex-direction: column;
-  font-family: "Segoe UI", system-ui, sans-serif;
+  font-family: 'Segoe UI', system-ui, sans-serif;
   color: var(--text);
   background: var(--bg);
 }
@@ -70,7 +70,7 @@ footer {
     white-space: nowrap;
     color: var(--muted);
 
-    &[data-kind="error"] {
+    &[data-kind='error'] {
       color: var(--danger);
     }
   }
@@ -142,7 +142,7 @@ button {
     transition: background 0.15s ease;
 
     &::after {
-      content: "";
+      content: '';
       position: absolute;
       top: 2px;
       left: 2px;
@@ -260,7 +260,7 @@ main {
     color: var(--text);
   }
 
-  &[aria-selected="true"] {
+  &[aria-selected='true'] {
     color: var(--text);
     background: var(--panel);
     box-shadow: inset 0 -2px 0 var(--accent);
@@ -280,7 +280,7 @@ main {
 #output {
   flex: 1;
   padding: 0.75rem;
-  font-family: "Cascadia Code", "Consolas", monospace;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
   font-size: 0.85rem;
   line-height: 1.55;
   color: var(--ok);
@@ -381,7 +381,7 @@ main {
 #decode-input {
   height: 5rem;
   padding: 0.6rem;
-  font-family: "Cascadia Code", "Consolas", monospace;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
   font-size: 0.85rem;
   color: var(--text);
   background: var(--field);
@@ -531,7 +531,7 @@ main {
 
 .chip {
   padding: 0.12rem 0.4rem;
-  font-family: "Cascadia Code", "Consolas", monospace;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
   font-size: 0.75rem;
   color: var(--text);
   background: var(--panel);
@@ -556,7 +556,7 @@ main {
   }
 
   & code {
-    font-family: "Cascadia Code", "Consolas", monospace;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
     color: var(--ok);
     word-break: break-all;
   }
@@ -585,7 +585,7 @@ main {
 }
 
 .tlv-tag {
-  font-family: "Cascadia Code", "Consolas", monospace;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
   font-weight: 700;
   color: var(--accent);
 }
@@ -601,7 +601,7 @@ main {
 .tlv-value {
   display: block;
   margin-top: 0.1rem;
-  font-family: "Cascadia Code", "Consolas", monospace;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
   color: var(--ok);
   word-break: break-all;
 }
@@ -627,13 +627,13 @@ main {
 }
 
 .tlv-constructed > summary::before {
-  content: "▸";
+  content: '▸';
   font-size: 0.7rem;
   color: var(--muted);
 }
 
 .tlv-constructed[open] > summary::before {
-  content: "▾";
+  content: '▾';
 }
 
 .tlv-children {

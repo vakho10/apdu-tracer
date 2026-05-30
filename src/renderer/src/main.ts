@@ -1,4 +1,10 @@
-import type { ApduRecord, StatusMessage, ThemePreference, TraceEntry, ViewPreference } from '../../preload'
+import type {
+  ApduRecord,
+  StatusMessage,
+  ThemePreference,
+  TraceEntry,
+  ViewPreference
+} from '../../preload'
 import {
   byteHex,
   commandReturnsTlv,
@@ -166,7 +172,13 @@ function dataRow(label: string, hex: string): HTMLElement {
 
 // --- Detailed view ----------------------------------------------------------
 
-function cardHead(badge: string, badgeClass: string, title: string, titleClass: string, time: string): HTMLElement {
+function cardHead(
+  badge: string,
+  badgeClass: string,
+  title: string,
+  titleClass: string,
+  time: string
+): HTMLElement {
   const head = el('div', 'card-head')
   head.append(
     el('span', `badge ${badgeClass}`, badge),
@@ -241,7 +253,8 @@ function buildResponseCard(
   if (apdu.data) {
     card.append(dataRow('Data', apdu.data))
     // Decode as TLV only when the command is unknown or one that returns TLV.
-    const tlvExpected = !pairing || pairing.commandIns === null || commandReturnsTlv(pairing.commandIns)
+    const tlvExpected =
+      !pairing || pairing.commandIns === null || commandReturnsTlv(pairing.commandIns)
     if (tlvExpected) {
       const tlv = parseTlv(apdu.data, profile)
       if (tlv.ok) {
@@ -423,7 +436,8 @@ function detectProfileFromSelect(command: CommandApdu): void {
   const detected = detectProfile(command.data)
   if (detected && detected !== detectedProfile) {
     detectedProfile = detected
-    if (profileChoice === 'auto') setStatus('info', `Detected ${PROFILE_LABELS[detected]} application`)
+    if (profileChoice === 'auto')
+      setStatus('info', `Detected ${PROFILE_LABELS[detected]} application`)
   }
 }
 
@@ -432,7 +446,7 @@ function applyProfile(): void {
   profileChoice = profileSelect.value as 'auto' | TlvProfile
   for (const entry of entries) {
     if (!entry.rebuild) continue
-    const profile = profileChoice === 'auto' ? entry.captureProfile ?? 'iso' : profileChoice
+    const profile = profileChoice === 'auto' ? (entry.captureProfile ?? 'iso') : profileChoice
     const fresh = entry.rebuild(profile)
     fresh.hidden = !entryVisible(entry)
     entry.card.replaceWith(fresh)
@@ -655,7 +669,10 @@ function renderDecode(): void {
 
   if (direction === 'command') {
     const parsed = parseCommand(hex)
-    card = parsed.kind === 'malformed' ? buildMalformedCard(record, parsed, '') : buildCommandCard(parsed, '')
+    card =
+      parsed.kind === 'malformed'
+        ? buildMalformedCard(record, parsed, '')
+        : buildCommandCard(parsed, '')
   } else {
     const parsed = parseResponse(hex)
     card =
@@ -726,7 +743,10 @@ async function openCapture(): Promise<void> {
       return
     }
     clearTrace()
-    pushMeta(`--- ${timestamp()}  opened capture ${result.path} ---`, `Opened capture ${result.path}`)
+    pushMeta(
+      `--- ${timestamp()}  opened capture ${result.path} ---`,
+      `Opened capture ${result.path}`
+    )
     setTracing(true)
     setStatus('info', `Reading capture from ${result.path}…`)
   } finally {

@@ -157,15 +157,22 @@ function startCapture(source: { iface: string } | { file: string }): void {
     '-l', // flush stdout after every packet
     '-n', // no name resolution (faster)
     '-Y',
-    `usbccid.bMessageType == 0x${CCID_XFR_BLOCK} || usbccid.bMessageType == 0x${CCID_DATA_BLOCK}`
-      + ` || usbccid.bMessageType == 0x${CCID_ICC_POWER_ON}`,
-    '-T', 'fields',
-    '-E', 'separator=|',
-    '-e', 'usbccid.bMessageType',
-    '-e', 'usb.endpoint_address.direction',
-    '-e', 'data.data',
-    '-e', 'usb.capdata',
-    '-e', 'usb.device_address'
+    `usbccid.bMessageType == 0x${CCID_XFR_BLOCK} || usbccid.bMessageType == 0x${CCID_DATA_BLOCK}` +
+      ` || usbccid.bMessageType == 0x${CCID_ICC_POWER_ON}`,
+    '-T',
+    'fields',
+    '-E',
+    'separator=|',
+    '-e',
+    'usbccid.bMessageType',
+    '-e',
+    'usb.endpoint_address.direction',
+    '-e',
+    'data.data',
+    '-e',
+    'usb.capdata',
+    '-e',
+    'usb.device_address'
   ]
 
   let proc: ChildProcess
@@ -257,8 +264,9 @@ async function locateTshark(): Promise<string | null> {
 function exportFileName(): string {
   const now = new Date()
   const pad = (n: number): string => String(n).padStart(2, '0')
-  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`
-    + `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  const stamp =
+    `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
+    `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
   return `apdu-trace-${stamp}.txt`
 }
 
@@ -274,7 +282,12 @@ function traceAsText(entries: TraceEntry[]): string {
 
 function traceAsJson(entries: TraceEntry[]): string {
   return JSON.stringify(
-    { tool: 'APDU Tracer', exportedAt: new Date().toISOString(), count: entries.length, apdus: entries },
+    {
+      tool: 'APDU Tracer',
+      exportedAt: new Date().toISOString(),
+      count: entries.length,
+      apdus: entries
+    },
     null,
     2
   )

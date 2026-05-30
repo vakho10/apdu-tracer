@@ -67,11 +67,11 @@ Built with **Electron** and **TypeScript**.
 
 ## Prerequisites
 
-| Requirement | Notes |
-|-------------|-------|
-| **Node.js** | v18 or newer. |
+| Requirement   | Notes                                                                                                                                                                              |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Node.js**   | v18 or newer.                                                                                                                                                                      |
 | **Wireshark** | Provides `tshark`. The app looks in `C:\Program Files\Wireshark\` and the `(x86)` variant, then falls back to `PATH`. If it lives elsewhere, use **Locate tshark…** in the header. |
-| **USBPcap** | USB capture driver. Install via the Wireshark installer ("USBPcap" component) or from [usbpcap.com](https://desowin.org/usbpcap/). A reboot is required after installing. |
+| **USBPcap**   | USB capture driver. Install via the Wireshark installer ("USBPcap" component) or from [usbpcap.com](https://desowin.org/usbpcap/). A reboot is required after installing.          |
 
 ## Installation
 
@@ -82,6 +82,7 @@ npm install
 ```
 
 > If the Electron binary download stalls, use a mirror:
+>
 > ```bash
 > # Windows (PowerShell)
 > $env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"; npm install
@@ -106,11 +107,11 @@ npm run dev
 
 ### Keyboard shortcuts
 
-| Key | Action |
-|-----|--------|
-| `Ctrl + F` | Focus the filter / search box. |
-| `F3` | Jump the Detailed view to the next error or warning. |
-| `← / →` | Cycle through the view tabs (with the tab list focused). |
+| Key        | Action                                                   |
+| ---------- | -------------------------------------------------------- |
+| `Ctrl + F` | Focus the filter / search box.                           |
+| `F3`       | Jump the Detailed view to the next error or warning.     |
+| `← / →`    | Cycle through the view tabs (with the tab list focused). |
 
 ### Simple view
 
@@ -164,11 +165,11 @@ bridge, where ISO 7816-4 / EMV / PIV / OpenPGP / GlobalPlatform decoding happens
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start the app with hot reload. |
-| `npm run build` | Build the production bundle into `out/`. |
-| `npm run build:win` | Build and package a Windows installer. |
+| Command             | Description                               |
+| ------------------- | ----------------------------------------- |
+| `npm run dev`       | Start the app with hot reload.            |
+| `npm run build`     | Build the production bundle into `out/`.  |
+| `npm run build:win` | Build and package a Windows installer.    |
 | `npm run typecheck` | Run the TypeScript compiler with no emit. |
 
 ## Project structure

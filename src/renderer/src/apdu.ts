@@ -227,9 +227,10 @@ function describeCommand(
     case 0xd0:
     case 0xd6:
     case 0xd7:
-      note = (p1 & 0x80) !== 0
-        ? `Short EF id 0x${byteHex(p1 & 0x1f)}, offset ${p2}`
-        : `Offset 0x${byteHex(p1)}${byteHex(p2)}`
+      note =
+        (p1 & 0x80) !== 0
+          ? `Short EF id 0x${byteHex(p1 & 0x1f)}, offset ${p2}`
+          : `Offset 0x${byteHex(p1)}${byteHex(p2)}`
       break
     case 0xb2:
     case 0xb3:
@@ -258,13 +259,19 @@ function describeStatus(sw1: number, sw2: number): { status: StatusKind; meaning
 
   if (sw === 0x9000) return { status: 'success', meaning: 'Success' }
   if (sw1 === 0x61) {
-    return { status: 'success', meaning: `Success — ${sw2} more byte(s) available, use GET RESPONSE` }
+    return {
+      status: 'success',
+      meaning: `Success — ${sw2} more byte(s) available, use GET RESPONSE`
+    }
   }
   if (sw1 === 0x6c) {
     return { status: 'warning', meaning: `Wrong Le — retry the command with Le = ${sw2}` }
   }
   if (sw1 === 0x63 && (sw2 & 0xf0) === 0xc0) {
-    return { status: 'warning', meaning: `Verification failed — ${sw2 & 0x0f} attempt(s) remaining` }
+    return {
+      status: 'warning',
+      meaning: `Verification failed — ${sw2 & 0x0f} attempt(s) remaining`
+    }
   }
 
   const exact = STATUS_WORDS[sw]
@@ -278,7 +285,8 @@ function describeStatus(sw1: number, sw2: number): { status: StatusKind; meaning
   }
 
   if (sw1 === 0x90) return { status: 'success', meaning: 'Success' }
-  if (sw1 === 0x62 || sw1 === 0x63) return { status: 'warning', meaning: 'Warning — no precise diagnosis' }
+  if (sw1 === 0x62 || sw1 === 0x63)
+    return { status: 'warning', meaning: 'Warning — no precise diagnosis' }
   return { status: 'error', meaning: `Unknown status word ${byteHex(sw1)}${byteHex(sw2)}` }
 }
 
@@ -312,7 +320,10 @@ function describeSecureMessaging(cla: number): string {
 export function parseCommand(hex: string): ParsedCommand {
   const bytes = toBytes(hex)
   if (bytes.length < 4) {
-    return { kind: 'malformed', message: `Command APDU too short — ${bytes.length} byte(s), need at least 4` }
+    return {
+      kind: 'malformed',
+      message: `Command APDU too short — ${bytes.length} byte(s), need at least 4`
+    }
   }
 
   const [cla, ins, p1, p2] = bytes
@@ -359,7 +370,10 @@ export function parseCommand(hex: string): ParsedCommand {
 export function parseResponse(hex: string): ParsedResponse {
   const bytes = toBytes(hex)
   if (bytes.length < 2) {
-    return { kind: 'malformed', message: `Response APDU too short — ${bytes.length} byte(s), need at least 2 for SW` }
+    return {
+      kind: 'malformed',
+      message: `Response APDU too short — ${bytes.length} byte(s), need at least 2 for SW`
+    }
   }
 
   const sw1 = bytes[bytes.length - 2]
@@ -375,5 +389,7 @@ export function parseResponse(hex: string): ParsedResponse {
  * (e.g. from READ BINARY) as TLV.
  */
 export function commandReturnsTlv(ins: number): boolean {
-  return ins === 0xa4 || ins === 0xca || ins === 0xcb || ins === 0xb2 || ins === 0xb3 || ins === 0xc0
+  return (
+    ins === 0xa4 || ins === 0xca || ins === 0xcb || ins === 0xb2 || ins === 0xb3 || ins === 0xc0
+  )
 }
