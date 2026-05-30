@@ -119,6 +119,27 @@ const entries: RenderedEntry[] = []
 const latencies: LatencySample[] = []
 const filter: Filter = { query: '', direction: 'all', issuesOnly: false }
 
+/**
+ * Running summary aggregates, updated as each APDU arrives so the summary view
+ * never has to re-parse the whole trace. Command/response totals are tracked by
+ * `commandCount`/`responseCount`; these cover the breakdown the summary adds.
+ */
+interface SummaryStats {
+  malformed: number
+  success: number
+  warning: number
+  errors: number
+  byInstruction: Map<string, number>
+}
+
+const summaryStats: SummaryStats = {
+  malformed: 0,
+  success: 0,
+  warning: 0,
+  errors: 0,
+  byInstruction: new Map()
+}
+
 const PROFILE_LABELS: Record<TlvProfile, string> = {
   iso: 'ISO 7816-4',
   emv: 'EMV',
@@ -471,10 +492,15 @@ function pushApdu(record: ApduRecord, time: string, arrivedAt: number | null): v
   if (record.direction === 'command') {
     const parsed = parseCommand(record.hex)
     if (parsed.kind === 'malformed') {
+      summaryStats.malformed += 1
       card = buildMalformedCard(record, parsed, time)
       search = `${hexText} ${parsed.message} malformed`
       status = 'error'
     } else {
+      summaryStats.byInstruction.set(
+        parsed.name,
+        (summaryStats.byInstruction.get(parsed.name) ?? 0) + 1
+      )
       card = buildCommandCard(parsed, time)
       search = `${hexText} ${parsed.name} ${parsed.note} case ${parsed.apduCase}`
       if (parsed.secureMessaging) search += ` secure messaging ${parsed.secureMessaging}`
@@ -495,11 +521,15 @@ function pushApdu(record: ApduRecord, time: string, arrivedAt: number | null): v
         : null
     if (pairing && pending) latencies.push({ name: pending.name, ms: pairing.latencyMs })
     if (parsed.kind === 'malformed') {
+      summaryStats.malformed += 1
       card = buildMalformedCard(record, parsed, time)
       search = `${hexText} ${parsed.message} malformed`
       status = 'error'
       attachCopy(card, record.hex)
     } else {
+      if (parsed.status === 'success') summaryStats.success += 1
+      else if (parsed.status === 'warning') summaryStats.warning += 1
+      else summaryStats.errors += 1
       const response = parsed
       captureProfile = activeProfile()
       rebuild = (profile: TlvProfile): HTMLElement => {
@@ -566,7 +596,7 @@ function statRow(label: string, value: string): HTMLElement {
   return row
 }
 
-/** Recomputes the whole-session summary from the captured trace. */
+/** Renders the whole-session summary from the running aggregates. */
 function renderSummary(): void {
   summary.replaceChildren()
   if (trace.length === 0) {
@@ -574,35 +604,13 @@ function renderSummary(): void {
     return
   }
 
-  let commands = 0
-  let responses = 0
-  let malformed = 0
-  let success = 0
-  let warning = 0
-  let errors = 0
-  const byInstruction = new Map<string, number>()
-
-  for (const entry of trace) {
-    if (entry.direction === 'command') {
-      commands += 1
-      const parsed = parseCommand(entry.hex)
-      if (parsed.kind === 'malformed') malformed += 1
-      else byInstruction.set(parsed.name, (byInstruction.get(parsed.name) ?? 0) + 1)
-    } else {
-      responses += 1
-      const parsed = parseResponse(entry.hex)
-      if (parsed.kind === 'malformed') malformed += 1
-      else if (parsed.status === 'success') success += 1
-      else if (parsed.status === 'warning') warning += 1
-      else errors += 1
-    }
-  }
+  const { malformed, success, warning, errors, byInstruction } = summaryStats
 
   const overview = summarySection('Overview')
   overview.append(
     statRow('Total APDUs', String(trace.length)),
-    statRow('Commands', String(commands)),
-    statRow('Responses', String(responses)),
+    statRow('Commands', String(commandCount)),
+    statRow('Responses', String(responseCount)),
     statRow('Malformed', String(malformed))
   )
   summary.append(overview)
@@ -691,6 +699,11 @@ function clearTrace(): void {
   latencies.length = 0
   commandCount = 0
   responseCount = 0
+  summaryStats.malformed = 0
+  summaryStats.success = 0
+  summaryStats.warning = 0
+  summaryStats.errors = 0
+  summaryStats.byInstruction.clear()
   pendingByDevice.clear()
   detectedProfile = 'iso'
   lastArrivedAt = null
