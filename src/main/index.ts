@@ -21,7 +21,9 @@ const TSHARK_CANDIDATES = [
 
 let mainWindow: BrowserWindow | null = null
 let tracer: ChildProcess | null = null
-let pendingAtr = false // set by an IccPowerOn, consumed by the following DataBlock
+// USB device addresses whose next DataBlock is an ATR (set by an IccPowerOn).
+// Keyed per device so two readers powering on at once don't cross-attribute.
+const pendingAtr = new Set<string>()
 
 function tsharkPath(): string {
   const configured = settings.get().tsharkPath
@@ -113,10 +115,11 @@ function handleLine(line: string): void {
   const [messageType = '', usbDirection = '', abData = '', capData = '', deviceAddress = ''] =
     line.split('|')
   const type = messageType.trim().toLowerCase().replace(/^0x/, '')
+  const device = deviceAddress.trim()
 
   // An IccPowerOn carries no APDU; it just marks the next DataBlock as the ATR.
   if (type === CCID_ICC_POWER_ON || type === '98') {
-    pendingAtr = true
+    pendingAtr.add(device)
     return
   }
 
@@ -128,26 +131,26 @@ function handleLine(line: string): void {
 
   const response = isResponse(messageType, usbDirection)
 
-  // The DataBlock right after an IccPowerOn is the ATR, not an APDU response.
-  if (response && pendingAtr) {
-    pendingAtr = false
+  // The DataBlock right after an IccPowerOn (same reader) is the ATR, not a response.
+  if (response && pendingAtr.has(device)) {
+    pendingAtr.delete(device)
     if (hex) mainWindow?.webContents.send('tracer:atr', hex.toUpperCase())
     return
   }
-  if (!response) pendingAtr = false // an XfrBlock cancels a stale pending ATR
+  if (!response) pendingAtr.delete(device) // an XfrBlock cancels a stale pending ATR for that reader
 
   if (!hex) return
   mainWindow?.webContents.send('tracer:apdu', {
     direction: response ? 'response' : 'command',
     hex: hex.toUpperCase(),
-    device: deviceAddress.trim()
+    device
   })
 }
 
 /** Streams APDUs from a live USBPcap interface or a saved capture file. */
 function startCapture(source: { iface: string } | { file: string }): void {
   if (tracer) return
-  pendingAtr = false
+  pendingAtr.clear()
 
   const input = 'iface' in source ? ['-i', source.iface] : ['-r', source.file]
   const label = 'iface' in source ? `interface ${source.iface}` : source.file
@@ -335,7 +338,8 @@ async function exportTrace(entries: TraceEntry[]): Promise<ExportResult> {
 
 /**
  * Validates a parsed JSON document as a trace produced by `traceAsJson`.
- * Returns the APDU entries, or null when the shape is not recognized.
+ * Returns the APDU entries (possibly an empty array for a valid empty trace),
+ * or null when the shape is not recognized.
  */
 function parseImported(data: unknown): TraceEntry[] | null {
   if (typeof data !== 'object' || data === null) return null
@@ -350,7 +354,8 @@ function parseImported(data: unknown): TraceEntry[] | null {
     if (typeof hex !== 'string' || !/^[0-9a-fA-F]{2,}$/.test(hex)) return null
     out.push({ time: typeof time === 'string' ? time : '', direction, hex: hex.toUpperCase() })
   }
-  return out.length > 0 ? out : null
+  // An empty `apdus` array is a valid (if empty) trace, not an unrecognized file.
+  return out
 }
 
 async function importTrace(): Promise<ImportResult> {
