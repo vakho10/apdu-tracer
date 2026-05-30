@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [1.0.3] - 2026-05-30
 
 ### Bug Fixes
 
@@ -11,6 +11,11 @@ All notable changes to this project are documented in this file.
 ### Documentation
 
 - Update README for the renderer split and tooling
+
+### Miscellaneous
+
+- Generate release notes and changelog with git-cliff
+- Strip conventional-commit prefixes from changelog lines
 
 ## [1.0.2] - 2026-05-30
 
