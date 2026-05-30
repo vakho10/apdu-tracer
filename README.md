@@ -171,6 +171,12 @@ bridge, where ISO 7816-4 / EMV / PIV / OpenPGP / GlobalPlatform decoding happens
 | `npm run build`     | Build the production bundle into `out/`.  |
 | `npm run build:win` | Build and package a Windows installer.    |
 | `npm run typecheck` | Run the TypeScript compiler with no emit. |
+| `npm test`          | Run the unit tests once (Vitest).         |
+| `npm run lint`      | Lint the sources with ESLint.             |
+| `npm run format`    | Format the sources with Prettier.         |
+
+`typecheck`, `lint`, `format:check` and `test` also run on every push to
+`main` and on pull requests via the [`CI`](.github/workflows/ci.yml) workflow.
 
 ## Project structure
 
@@ -184,7 +190,11 @@ src/
     src/tlv.ts          BER-TLV parser; ISO / EMV / PIV / OpenPGP tag dictionaries;
                         value decoding (text, dates, BCD, bit fields, AFL, CVM List)
     src/atr.ts          ATR parser; historical-byte COMPACT-TLV decoding
-    src/main.ts         UI logic — views, filter, summary, decode, IPC handlers
+    src/dom.ts          Shared DOM element and hex/time formatting helpers
+    src/cards.ts        Detailed-view card builders and the BER-TLV tree renderer
+    src/summary.ts      Summary view, rendered from the running session aggregates
+    src/main.ts         UI orchestration — state, views, filter, decode, IPC wiring
+    src/*.test.ts       Vitest unit tests for the decoders (apdu, tlv, atr)
 ```
 
 ## Releases
@@ -196,7 +206,9 @@ NSIS installer (`.exe`), its `.blockmap` and `latest.yml` attached.
 
 To cut a new release:
 
-1. Bump `version` in `package.json` and commit.
+1. Bump `version` in `package.json`, run `npm install` so `package-lock.json`
+   picks up the new version (the release job's `npm ci` requires the two to
+   match), then commit both.
 2. Tag the commit `vX.Y.Z` (matching the `package.json` version) and push
    the tag:
 
