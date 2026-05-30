@@ -21,10 +21,10 @@ footer = ''
 trim = true
 
 [git]
-# Match on the raw subject via commit_parsers rather than the strict
-# Conventional Commits grammar — the prose fallbacks need the raw message, and
-# the regexes below still pick up feat:/fix:/docs: prefixes when present.
-conventional_commits = false
+# Parse Conventional Commits so a "feat:/fix:/ci:" prefix is stripped from the
+# rendered line; keep unconventional (prose) commits too — the parsers below
+# still categorise both by matching the raw subject.
+conventional_commits = true
 filter_unconventional = false
 split_commits = false
 # First matching rule wins. Conventional prefixes first, then prose verbs.
