@@ -11,3 +11,7 @@ extraResources:
 win:
   target: nsis
   icon: build/icon.png
+nsis:
+  # Dash-cased installer name; the default uses "APDU Tracer Setup …", whose
+  # spaces GitHub rewrites to dots on the release asset.
+  artifactName: APDU-Tracer-Setup-${version}.${ext}
