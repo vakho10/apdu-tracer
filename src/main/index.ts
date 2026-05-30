@@ -56,7 +56,9 @@ function createWindow(): void {
       preload: preloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      // The preload only uses electron's contextBridge/ipcRenderer, both of
+      // which work under the sandbox, and the renderer never touches Node.
+      sandbox: true
     }
   })
 
