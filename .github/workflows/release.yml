@@ -30,10 +30,10 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # build:win runs electron-builder with --publish never; the release is
+      # uploaded by the dedicated step below so assets aren't published twice.
       - name: Build Windows installer
         run: npm run build:win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish release
         uses: softprops/action-gh-release@v2

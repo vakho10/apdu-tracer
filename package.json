@@ -15,7 +15,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "build:win": "electron-vite build && electron-builder --win"
+    "build:win": "electron-vite build && electron-builder --win --publish never"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
