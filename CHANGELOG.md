@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.1.0] - 2026-06-01
+
+### Bug Fixes
+
+- Scroll the detailed view fully to the newest card
+
+### Documentation
+
+- Add CONTRIBUTING guide
+
+### Features
+
+- Show a splash screen while the app loads
+
+### Miscellaneous
+
+- Use a dash-cased Windows installer name
+
 ## [1.0.3] - 2026-05-30
 
 ### Bug Fixes
