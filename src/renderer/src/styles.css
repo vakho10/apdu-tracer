@@ -414,11 +414,6 @@ main {
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
   border-radius: 6px;
-  /* Virtualize the list: the browser skips layout and paint for off-screen
-     cards and remembers each card's measured height, so a trace with
-     thousands of APDUs scrolls smoothly. */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 100px;
 
   &.card--response {
     border-left-color: var(--ok);
