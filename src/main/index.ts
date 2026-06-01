@@ -20,7 +20,11 @@ const TSHARK_CANDIDATES = [
 ]
 
 let mainWindow: BrowserWindow | null = null
+let splashWindow: BrowserWindow | null = null
 let tracer: ChildProcess | null = null
+
+/** Keep the splash visible at least this long so it never just flickers by. */
+const SPLASH_MIN_MS = 700
 // USB device addresses whose next DataBlock is an ATR (set by an IccPowerOn).
 // Keyed per device so two readers powering on at once don't cross-attribute.
 const pendingAtr = new Set<string>()
@@ -43,7 +47,41 @@ function iconPath(): string {
     : join(__dirname, '../../build/icon.png')
 }
 
+/** Loads one of the renderer's HTML entries, from the dev server or disk. */
+function loadRenderer(window: BrowserWindow, page: 'index' | 'splash'): void {
+  const rendererUrl = process.env['ELECTRON_RENDERER_URL']
+  if (rendererUrl) window.loadURL(page === 'index' ? rendererUrl : `${rendererUrl}/${page}.html`)
+  else window.loadFile(join(__dirname, `../renderer/${page}.html`))
+}
+
+/** Frameless window shown immediately while the main window's renderer loads. */
+function createSplashWindow(): void {
+  splashWindow = new BrowserWindow({
+    width: 320,
+    height: 220,
+    frame: false,
+    resizable: false,
+    movable: false,
+    show: false,
+    center: true,
+    transparent: true,
+    backgroundColor: '#00000000',
+    title: 'APDU Tracer',
+    icon: iconPath(),
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }
+  })
+
+  splashWindow.removeMenu()
+  loadRenderer(splashWindow, 'splash')
+  splashWindow.once('ready-to-show', () => splashWindow?.show())
+  splashWindow.on('closed', () => {
+    splashWindow = null
+  })
+}
+
 function createWindow(): void {
+  const shownAt = Date.now()
+
   mainWindow = new BrowserWindow({
     width: 760,
     height: 580,
@@ -51,6 +89,8 @@ function createWindow(): void {
     minHeight: 360,
     title: 'APDU Tracer',
     icon: iconPath(),
+    // Stay hidden until the renderer is painted; the splash covers the gap.
+    show: false,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#1e1e2e' : '#f5f5f7',
     webPreferences: {
       preload: preloadPath(),
@@ -63,10 +103,17 @@ function createWindow(): void {
   })
 
   mainWindow.removeMenu()
+  loadRenderer(mainWindow, 'index')
 
-  const rendererUrl = process.env['ELECTRON_RENDERER_URL']
-  if (rendererUrl) mainWindow.loadURL(rendererUrl)
-  else mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  mainWindow.once('ready-to-show', () => {
+    const reveal = (): void => {
+      splashWindow?.close()
+      mainWindow?.show()
+    }
+    const elapsed = Date.now() - shownAt
+    if (elapsed >= SPLASH_MIN_MS) reveal()
+    else setTimeout(reveal, SPLASH_MIN_MS - elapsed)
+  })
 
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -393,6 +440,7 @@ ipcMain.handle('trace:import', () => importTrace())
 
 app.whenReady().then(() => {
   settings.load()
+  createSplashWindow()
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
