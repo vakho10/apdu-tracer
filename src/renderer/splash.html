@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'"
+    />
+    <title>APDU Tracer</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: light-dark(#f4f4f6, #1e1e2e);
+        --panel: light-dark(#e8e8ec, #28283c);
+        --text: light-dark(#1e2030, #cdd6f4);
+        --muted: light-dark(#6c6f85, #9399b2);
+        --accent: light-dark(#1e66f5, #89b4fa);
+        --border: light-dark(rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0.4));
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        /* Rounded card with a hairline border so the frameless window reads as
+           a deliberate splash rather than a clipped rectangle. */
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        color: var(--text);
+        background: var(--bg);
+        user-select: none;
+        overflow: hidden;
+      }
+
+      .chip {
+        color: var(--accent);
+        /* A gentle pulse hints that work is happening behind the splash. */
+        animation: pulse 1.6s ease-in-out infinite;
+      }
+
+      .title {
+        font-size: 1.35rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+
+      .subtitle {
+        margin-top: -0.6rem;
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+
+      .track {
+        position: relative;
+        width: 180px;
+        height: 4px;
+        margin-top: 0.4rem;
+        background: var(--panel);
+        border-radius: 999px;
+        overflow: hidden;
+      }
+
+      .track::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 40%;
+        height: 100%;
+        background: var(--accent);
+        border-radius: inherit;
+        animation: slide 1.3s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.55;
+        }
+      }
+
+      @keyframes slide {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(450%);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .chip,
+        .track::after {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- A smart-card chip glyph, echoing the app icon, drawn inline so the
+         splash needs no bundled image and stays crisp at any DPI. -->
+    <svg
+      class="chip"
+      width="72"
+      height="72"
+      viewBox="0 0 48 48"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="6" y="10" width="36" height="28" rx="4" />
+      <rect x="17" y="17" width="14" height="14" rx="2" />
+      <path d="M24 10v7M24 31v7M6 24h11M31 24h11M17 17l-5-5M31 17l5-5M17 31l-5 5M31 31l5 5" />
+    </svg>
+    <div class="title">APDU Tracer</div>
+    <div class="subtitle">Starting up…</div>
+    <div class="track" role="progressbar" aria-label="Loading"></div>
+  </body>
+</html>
