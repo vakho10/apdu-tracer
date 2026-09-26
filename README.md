@@ -1,5 +1,9 @@
 # APDU Tracer
 
+The first **C++20 / Qt 6 native Windows version** lives in [`native/`](native/README.md).
+It reads the USBPcap driver directly and displays textual APDUs. See its README
+for build instructions, usage, and the initial supported capture formats.
+
 A desktop app that traces **APDUs** (Application Protocol Data Units) sent to
 and received from a smart card reader. It captures live USB traffic with
 Wireshark's `tshark` over a **USBPcap** interface — or replays a saved

@@ -8,3 +8,10 @@ release/
 # Editor / tooling
 .idea/
 .claude/
+
+# Native Qt build output and local SDKs
+native/build/
+native/build-*/
+native/.deps/
+native/dist/
+native/CMakeUserPresets.json
