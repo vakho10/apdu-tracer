@@ -1,122 +1,84 @@
 # Contributing to APDU Tracer
 
-Thanks for your interest in improving APDU Tracer! This guide covers how to set
-up the project, the checks your change needs to pass, and how commits and
-releases work.
+APDU Tracer is a C++20 and Qt 6 Widgets application built with CMake. Windows is
+the primary platform; live capture uses the separately installed USBPcap driver.
 
 ## Getting started
 
-1. **Fork** the repository and **clone** your fork.
-2. Install dependencies:
+Clone the repository and install Visual Studio 2022 with the C++ desktop tools,
+a Windows SDK, CMake 3.21 or newer, and Qt 6.5 or newer with an MSVC x64 kit.
+The current build has been tested with Qt 6.8.1 and MSVC 2022. See the
+[README](README.md#build-on-windows) for setup and deployment details.
 
-   ```bash
-   npm install
-   ```
+From PowerShell in the repository root, adjust the Qt path for your installation:
 
-   > If the Electron binary download stalls, use a mirror:
-   >
-   > ```bash
-   > # Windows (PowerShell)
-   > $env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"; npm install
-   > ```
+```powershell
+cmake -S . -B build/windows -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:/Qt/6.8.1/msvc2022_64"
+cmake --build build/windows --config Release --parallel
+$env:PATH = "C:\Qt\6.8.1\msvc2022_64\bin;" + $env:PATH
+ctest --test-dir build/windows -C Release --output-on-failure
+& .\build\windows\Release\APDUTracer.exe
+```
 
-3. Start the app with hot reload:
-
-   ```bash
-   npm run dev
-   ```
-
-### Prerequisites
-
-- **Node.js** v18 or newer.
-- To exercise live capture you also need **Wireshark** (for `tshark`) and
-  **USBPcap** — see the [README](README.md#prerequisites). These are not needed
-  to build, run the unit tests, or work on the decoders.
+USBPcap and reader hardware are needed for live capture only. Automated tests
+use synthetic input and substituted driver calls.
 
 ## Project layout
 
-The renderer decoders are plain, dependency-free TypeScript and are the easiest
-place to start. See the [Project structure](README.md#project-structure) section
-of the README for a file-by-file map. In short:
+- `src/core/`: standard C++ PCAP, USBPcap, and CCID decoding.
+- `src/capture/`: Windows driver access and the portable fallback.
+- `src/ui/`: Qt capture worker, bounded queue, and main window.
+- `tests/`: protocol regression tests, fixture generation, and the Windows
+  backend harness.
+- `ui-tests/`: offscreen Qt replay and worker tests.
+- `CMakeLists.txt`: build targets, CTest registration, and runtime deployment.
 
-- `src/main/` — Electron main process (tshark capture, IPC, settings).
-- `src/preload/` — the context-isolated bridge.
-- `src/renderer/src/` — the UI and the `apdu` / `tlv` / `atr` decoders, each
-  with a colocated `*.test.ts`.
+## Validation
 
-## Before you open a pull request
+Run the build and CTest commands above before opening a pull request. The full
+Windows build has five CTest checks:
 
-Run the same checks CI runs, and make sure they all pass:
+| Check | Coverage |
+| --- | --- |
+| `decoder_tests` | PCAP parsing, USB direction, CCID framing, APDU validation, and malformed input |
+| `usbpcap_backend_tests` | Windows capture setup, streaming, cancellation, and error cleanup using substituted Win32 calls |
+| `generate_fixture` | Creates the synthetic capture required by the Qt replay test |
+| `qt_smoke_tests` | Replays a capture through the worker and verifies command and response text in the offscreen window |
+| `worker_tests` | Replay under backpressure, cancellation, and bounded display memory |
 
-```bash
-npm run typecheck    # tsc --noEmit
-npm run lint         # eslint .
-npm run format       # prettier --write .  (or format:check to only verify)
-npm test             # vitest run
+The Windows backend check is registered only on Windows. The fixture and Qt
+checks require the default `APDU_BUILD_GUI=ON`; disabling the GUI allows work on
+the core without Qt:
+
+```powershell
+cmake -S . -B build/core -DAPDU_BUILD_GUI=OFF
+cmake --build build/core --config Release
+ctest --test-dir build/core -C Release --output-on-failure
 ```
 
-CI runs `typecheck`, `lint`, `format:check` and `test` on every push and pull
-request (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)), so a green
-local run means a green CI run.
+CI uses CMake and CTest; see [the workflow](.github/workflows/ci.yml) for its
+current configuration. Keep tests focused on observable behavior, especially
+decoding boundaries, capture cancellation, and resource cleanup. Add a
+regression case when fixing a bug in these areas.
 
-### Tests
+Live hardware compatibility has not yet been validated. For capture changes,
+perform the [manual hardware check](README.md#verification) when a reader is
+available and report the reader, Windows version, and result in the PR. State
+clearly when validation used synthetic captures only.
 
-Unit tests use [Vitest](https://vitest.dev) and live next to the code they cover
-(`src/renderer/src/*.test.ts`). The decoders are pure functions, so tests are
-small and fast.
+## Code and pull requests
 
-- **Add or update tests** for any change to decoding behaviour (`apdu.ts`,
-  `tlv.ts`, `atr.ts`).
-- `npm run test:watch` reruns tests as you edit.
+Follow the existing C++ formatting and naming conventions. Keep decoder code
+independent of Qt and Windows, and keep driver-specific code in `src/capture/`.
+Address compiler warnings introduced by your changes.
 
-### Code style
+Keep each PR focused. Describe the problem, the resulting behavior, and the
+validation performed. Update the README when supported capture formats, usage,
+or limitations change. Use concise, descriptive commit messages.
 
-Formatting and linting are enforced by **Prettier** and **ESLint**; the configs
-([`.prettierrc.json`](.prettierrc.json), [`eslint.config.mjs`](eslint.config.mjs))
-are the source of truth — don't fight them. Run `npm run format` before
-committing.
-
-## Commit messages
-
-Releases and the [changelog](CHANGELOG.md) are generated from commit messages by
-[git-cliff](https://git-cliff.org), so please use
-[Conventional Commits](https://www.conventionalcommits.org/):
-
-```
-<type>: <short summary in the imperative mood>
-```
-
-Common types and the changelog section each maps to:
-
-| Type                     | Changelog section |
-| ------------------------ | ----------------- |
-| `feat`                   | Features          |
-| `fix`                    | Bug Fixes         |
-| `perf`                   | Performance       |
-| `refactor`               | Refactor          |
-| `docs`                   | Documentation     |
-| `test`                   | Testing           |
-| `chore` / `ci` / `build` | Miscellaneous     |
-
-Example: `fix: stop double-counting malformed responses in the summary`.
-
-Plain prose subjects are still categorised on a best-effort basis (see
-[`cliff.toml`](cliff.toml)), but a Conventional Commit prefix makes the grouping
-exact and is stripped from the rendered changelog line.
-
-## Pull requests
-
-- Keep each PR focused on a single change; smaller PRs are reviewed faster.
-- Describe **what** changed and **why**, and link any related issue.
-- Make sure the checks above pass and tests are included where relevant.
-
-## Releases
-
-Releases are cut by maintainers. The process is documented in the
-[Releases](README.md#releases) section of the README: bump the version, tag
-`vX.Y.Z`, and push the tag — the [`Release`](.github/workflows/release.yml)
-workflow builds the Windows installer and publishes a GitHub release whose notes
-are generated by git-cliff from the commits since the previous tag.
+The CMake install target deploys the application and Qt runtime into a local
+folder on Windows. A release installer and automated publishing workflow are
+not currently provided.
 
 ## License
 

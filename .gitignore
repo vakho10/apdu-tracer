@@ -1,17 +1,12 @@
-node_modules/
-out/
-dist/
-release/
+# CMake output, packaged binaries, and local SDKs
+/build/
+/build-*/
+/dist/
+/.deps/
+/CMakeUserPresets.json
 *.log
 .DS_Store
 
 # Editor / tooling
 .idea/
 .claude/
-
-# Native Qt build output and local SDKs
-native/build/
-native/build-*/
-native/.deps/
-native/dist/
-native/CMakeUserPresets.json

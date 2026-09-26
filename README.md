@@ -1,250 +1,146 @@
 # APDU Tracer
 
-The first **C++20 / Qt 6 native Windows version** lives in [`native/`](native/README.md).
-It reads the USBPcap driver directly and displays textual APDUs. See its README
-for build instructions, usage, and the initial supported capture formats.
+A Windows desktop tracer built with **C++20, Qt 6 Widgets, and CMake**.
+It reads the installed USBPcap driver directly and displays sent (`>>`) and
+received (`<<`) APDUs as hexadecimal text.
 
-A desktop app that traces **APDUs** (Application Protocol Data Units) sent to
-and received from a smart card reader. It captures live USB traffic with
-Wireshark's `tshark` over a **USBPcap** interface — or replays a saved
-`.pcap` / `.pcapng` capture file — decodes the CCID frames, and shows each
-APDU with full ISO 7816-4, EMV, PIV, OpenPGP and GlobalPlatform decoding.
+This initial version focuses on capture and text. APDU interpretation, TLV
+decoding, themes, and installers can follow later.
 
-Built with **Electron** and **TypeScript**.
+## Build on Windows
 
-## Features
+Requirements:
 
-### Capture
+- Windows 10/11 x64.
+- Visual Studio 2022 with **Desktop development with C++** and a Windows SDK.
+- CMake 3.21 or newer (also available in Visual Studio).
+- Qt 6.5 or newer with **Widgets** and an MSVC x64 kit matching your compiler.
+  The implementation is tested with Qt 6.8.1 and MSVC 2022.
+- The [USBPcap driver](https://desowin.org/usbpcap/) for live capture. Install it
+  separately and restart Windows if requested. Offline replay needs no driver.
 
-- **USBPcap** interface picker with one-click start / stop tracing.
-- **Open a `.pcap` / `.pcapng`** file to analyse a trace offline (`tshark -r`).
-- Pairs each command with its response **per USB device address**, so multiple
-  readers on one host controller don't cross-contaminate latency or TLV gating.
-- Captures and decodes the **ATR** from `IccPowerOn` — convention (direct /
-  inverse), offered transmission protocols, and historical bytes (with the
-  category indicator and COMPACT-TLV data objects named).
-- Configurable `tshark.exe` path; a **Locate tshark…** button surfaces in the
-  header when tshark can't be invoked.
+From PowerShell at the repository root, adjust the Qt kit path:
 
-### Views — tabbed and live
-
-- **Simple** — one APDU per line, with the **time gap since the previous APDU**.
-- **Detailed** — each APDU as a card:
-  - Decoded instruction name (ISO 7816-4, with **GlobalPlatform** names under a
-    proprietary `CLA`), `CLA`/`INS`/`P1`/`P2`/`Lc`/`Le` fields, ISO **case 1–4**,
-    a **secure-messaging chip** when the CLA flags SM, and a `P1`/`P2` note
-    (SELECT method, READ BINARY/RECORD offsets, INSTALL phase, GET STATUS
-    subset, …).
-  - Response status word with its meaning, command↔response **latency**, and a
-    collapsible **BER-TLV tree** for well-formed data.
-  - Per-card **Copy** button puts the raw hex on the clipboard.
-- **Summary** — per-session totals, error rate, latency min/avg/max and the
-  slowest exchange, plus a command-by-instruction breakdown.
-- **Decode** — paste APDU hex and decode it without capturing, using the active
-  TLV profile.
-
-### TLV decoding
-
-- Application-aware tag dictionaries — **EMV**, **PIV**, **OpenPGP** — layered
-  over the generic ISO 7816-4 set, **auto-selected from the `SELECT` AID** or
-  chosen manually from the profile dropdown.
-- Primitive values rendered in human-readable form: ASCII text, life-cycle byte,
-  BCD dates (`20YY-MM-DD`) and times (`HH:MM:SS`), numeric fields, and binary
-  counters.
-- Under the EMV profile, structured / bit-field tags are decoded too:
-  - **AIP** (`82`), **TVR** (`95`), **AUC** (`9F07`) and **TSI** (`9B`) — listed
-    as their set-flag meanings.
-  - **AFL** (`94`) — record ranges per file (SFI, first–last, offline-auth count).
-  - **CVM List** (`8E`) — verification rules (method + condition).
-
-### Trace handling
-
-- **Filter & search** by direction, **Issues only**, or hex / instruction /
-  status text (`Ctrl + F`). `F3` jumps the Detailed view to the next error or
-  warning, flashing the target card.
-- **Copy** any APDU's hex; **Import** a saved JSON trace; **Export** to
-  `.txt`, `.json` or `.csv` — honouring the active filter.
-- **Light / dark / system** theme, **auto-scroll** toggle, configurable
-  `tshark` path, and the last active view all **persist between sessions**.
-- Detailed-view cards are **virtualised** (Chromium `content-visibility`), so
-  traces with thousands of APDUs stay smooth.
-
-## Prerequisites
-
-| Requirement   | Notes                                                                                                                                                                              |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Node.js**   | v18 or newer.                                                                                                                                                                      |
-| **Wireshark** | Provides `tshark`. The app looks in `C:\Program Files\Wireshark\` and the `(x86)` variant, then falls back to `PATH`. If it lives elsewhere, use **Locate tshark…** in the header. |
-| **USBPcap**   | USB capture driver. Install via the Wireshark installer ("USBPcap" component) or from [usbpcap.com](https://desowin.org/usbpcap/). A reboot is required after installing.          |
-
-## Installation
-
-```bash
-git clone https://github.com/Vakho10/apdu-tracer.git
-cd apdu-tracer
-npm install
+```powershell
+cmake -S . -B build/windows -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="C:/Qt/6.8.1/msvc2022_64"
+cmake --build build/windows --config Release --parallel
+$env:PATH = "C:\Qt\6.8.1\msvc2022_64\bin;" + $env:PATH
+ctest --test-dir build/windows -C Release --output-on-failure
+& .\build\windows\Release\APDUTracer.exe
 ```
 
-> If the Electron binary download stalls, use a mirror:
->
-> ```bash
-> # Windows (PowerShell)
-> $env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"; npm install
-> ```
+Alternatively, open `CMakeLists.txt` in Qt Creator and select your MSVC
+kit. A DLL/plugin error at startup usually means Qt's `bin` directory is missing
+from `PATH`. For a self-contained local application folder:
 
-## Usage
-
-```bash
-npm run dev
+```powershell
+$apduDist = Join-Path (Get-Location) 'dist'
+cmake --install build/windows --config Release --prefix $apduDist
+& .\dist\bin\APDUTracer.exe
 ```
 
-1. Pick a **USBPcap interface** (use **Refresh** to rescan). To analyse a
-   saved capture instead, **Open file…** loads a `.pcap` / `.pcapng`.
-2. Press **Start tracing**.
-3. Interact with your smart card reader — captured APDUs appear live in the
-   active tab.
-4. Switch between **Simple**, **Detailed**, **Summary** and **Decode** tabs at
-   any time; arrow keys cycle the tab list when focused.
-5. Press **Stop tracing** when done.
-6. **Save trace** writes to `.txt`, `.json` or `.csv` (the format follows the
-   chosen extension); **Import** reloads a saved JSON trace.
+On Windows the install step uses Qt's deployment support to collect runtime
+DLLs and plugins. It does not install or bundle the USBPcap driver. Qt's
+[Windows deployment guide](https://doc.qt.io/qt-6/windows-deployment.html)
+describes runtime deployment. Keep Qt and third-party license notices with any
+redistributed runtime; this prototype does not produce a release installer.
 
-### Keyboard shortcuts
+## Use
 
-| Key        | Action                                                   |
-| ---------- | -------------------------------------------------------- |
-| `Ctrl + F` | Focus the filter / search box.                           |
-| `F3`       | Jump the Detailed view to the next error or warning.     |
-| `← / →`    | Cycle through the view tabs (with the tab list focused). |
+1. Select a **USB controller** (`USBPcap1`, `USBPcap2`, …). USBPcap captures a root
+   hub, not an individual reader. **Refresh** rescans the available controllers.
+2. Leave **USB address** at **All**, or choose the known USB address of your
+   reader on that controller. The filter also applies to offline replay.
+3. Click **Start capture**, then use your existing smart-card application.
+4. Click **Stop** before **Save text**. Selected text can also be copied normally.
 
-### Simple view
-
-Each line is formatted as:
-
-```
-[HH:MM:SS +120ms] >> 00 A4 04 00 07 A0 00 00 00 03 00 00
-[HH:MM:SS +12ms]  << 6F 1A 84 ... 90 00
+```text
+[12:34:56.001] bus 1 / device 5 / slot 0 / seq 7  >>  00 A4 04 00 00
+[12:34:56.013] bus 1 / device 5 / slot 0 / seq 7  <<  90 00
 ```
 
-`>>` is a command sent to the card, `<<` is the response received from it.
-The `+Nms` is the gap since the previous APDU (absent for the first APDU and
-for imported traces).
+If opening the capture device fails with access denied, run the app as
+Administrator. Close any other capture using the same controller. The app
+does not automatically elevate or install drivers.
 
-### Detailed view
+**Open PCAP** reads a classic `.pcap` with USBPcap link type 249. You can also
+pass a capture filename on the command line. Each start/open begins a new
+displayed session. ATRs and reader-control traffic are intentionally omitted.
 
-Each APDU is a card:
+The display retains recent APDUs up to **20,000 rows / 16 MiB of text**, and text
+export saves that displayed portion. The worker queue is bounded by both row
+count and text size; if the display cannot keep up
+with live APDU traffic, the status bar reports the number of dropped display
+entries. USBPcap itself can lose packets when its driver buffer overflows;
+this initial version cannot count driver-side losses.
 
-- **Command** — decoded instruction name (GlobalPlatform names take precedence
-  under a proprietary CLA), `CLA`/`INS`/`P1`/`P2`/`Lc`/`Le`, ISO case 1–4,
-  optional **SM** chip when secure messaging is in use, and a P1/P2 note.
-- **Response** — data, status word and its meaning (e.g. `6A82` — "file or
-  application not found"), round-trip latency since the matching command, and
-  a collapsible BER-TLV tree where applicable. Each tag is named from the
-  active TLV profile (EMV / PIV / OpenPGP, falling back to ISO 7816-4) and
-  shown with its length, raw value, and a decoded interpretation when known.
-- **ATR** — a card-power-on event, decoded into convention, protocols, and
-  historical bytes (COMPACT-TLV data objects listed by name).
+## Initial scope and limitations
 
-## How it works
+- APDU-level **USB CCID** readers using unchained `PC_to_RDR_XfrBlock` and
+  `RDR_to_PC_DataBlock` exchanges. Character/TPDU-level T=0/T=1 reconstruction,
+  CCID APDU chaining, non-CCID/proprietary readers, and contactless protocols
+  outside CCID are not supported.
+- CCID framing and APDU lengths are checked conservatively. Reader descriptors
+  are not decoded, so the app cannot establish a reader's exchange level or
+  distinguish every possible unrelated bulk payload with a CCID-like layout.
+- Responses require a captured matching command on the same bus, device, slot,
+  and sequence. Starting halfway through an exchange can omit its response.
+- Composite devices with independent CCID interfaces reusing the same slot
+  numbers are not supported yet; response pairing does not distinguish them.
+- Power-on responses are tracked separately as ATRs. Failed CCID commands and
+  time-extension notifications are not APDU responses.
+- Partial USB transfers are reassembled; invalid lengths, truncated packets,
+  and malformed input do not become displayed APDUs.
+- **PCAPNG is not supported yet**; save/export captures in classic PCAP format.
+  Only USBPcap link type 249 is supported, including when replaying elsewhere.
+- Live capture is Windows-only. The decoder and offline Qt viewer are portable.
 
-The main process spawns:
+## Verification
 
-```
-tshark -i <interface> -l -n \
-  -Y "usbccid.bMessageType == 0x6f || usbccid.bMessageType == 0x80 || usbccid.bMessageType == 0x62" \
-  -T fields -e usbccid.bMessageType -e usb.endpoint_address.direction \
-  -e data.data -e usb.capdata -e usb.device_address
-```
+`decoder_tests` constructs synthetic captures to exercise PCAP boundaries,
+endianness, USB direction, CCID fragmentation, APDU validation, ATRs, multiple
+slots/devices, malformed input, and truncation. It needs no Qt or driver:
 
-- `0x6f` = `PC_to_RDR_XfrBlock` (command), `0x80` = `RDR_to_PC_DataBlock`
-  (response), `0x62` = `PC_to_RDR_IccPowerOn` (the next DataBlock carries the
-  ATR).
-- The APDU payload is read from the CCID `abData` field, with a fallback that
-  strips the 10-byte CCID header from raw `usb.capdata`.
-- `usb.device_address` keys command/response pairing to each reader.
-- A capture file is read the same way with `tshark -r <file>` instead of `-i`.
-
-Captured records are streamed to the renderer over a context-isolated IPC
-bridge, where ISO 7816-4 / EMV / PIV / OpenPGP / GlobalPlatform decoding happens.
-
-## Scripts
-
-| Command             | Description                               |
-| ------------------- | ----------------------------------------- |
-| `npm run dev`       | Start the app with hot reload.            |
-| `npm run build`     | Build the production bundle into `out/`.  |
-| `npm run build:win` | Build and package a Windows installer.    |
-| `npm run typecheck` | Run the TypeScript compiler with no emit. |
-| `npm test`          | Run the unit tests once (Vitest).         |
-| `npm run lint`      | Lint the sources with ESLint.             |
-| `npm run format`    | Format the sources with Prettier.         |
-
-`typecheck`, `lint`, `format:check` and `test` also run on every push to
-`main` and on pull requests via the [`CI`](.github/workflows/ci.yml) workflow.
-
-## Project structure
-
-```
-src/
-  main/                 Electron main process — tshark capture, IPC, persisted settings
-  preload/              Context-isolated bridge exposing window.api
-  renderer/             UI — semantic HTML5, CSS3, TypeScript
-    src/apdu.ts         APDU parsing — ISO + GP instruction names, status words,
-                        secure-messaging indication, case 1-4 derivation
-    src/tlv.ts          BER-TLV parser; ISO / EMV / PIV / OpenPGP tag dictionaries;
-                        value decoding (text, dates, BCD, bit fields, AFL, CVM List)
-    src/atr.ts          ATR parser; historical-byte COMPACT-TLV decoding
-    src/dom.ts          Shared DOM element and hex/time formatting helpers
-    src/cards.ts        Detailed-view card builders and the BER-TLV tree renderer
-    src/summary.ts      Summary view, rendered from the running session aggregates
-    src/main.ts         UI orchestration — state, views, filter, decode, IPC wiring
-    src/*.test.ts       Vitest unit tests for the decoders (apdu, tlv, atr)
+```powershell
+cmake -S . -B build/core -DAPDU_BUILD_GUI=OFF
+cmake --build build/core --config Release
+ctest --test-dir build/core -C Release --output-on-failure
 ```
 
-## Releases
+The full Windows build registers five CTest checks: `decoder_tests`,
+`usbpcap_backend_tests`, `generate_fixture`, `qt_smoke_tests`, and `worker_tests`.
+With the GUI enabled, CTest generates a synthetic `.pcap` and runs the
+Qt window offscreen, replaying it through the worker to verify both directions
+reach the display. Synthetic tests do not establish hardware compatibility.
+On Windows a backend harness substitutes the driver-facing Win32 calls to test
+configuration, streaming, idle-read cancellation, and cleanup on errors.
+Worker tests also exercise lossless replay of a record containing 12,000 commands,
+cancellation under backpressure, and bounded display memory for long APDUs.
 
-Tagged versions are built by the [`Release`](.github/workflows/release.yml)
-GitHub Actions workflow on `windows-latest` and published to the
-[Releases page](https://github.com/vakho10/apdu-tracer/releases) with the
-NSIS installer (`.exe`), its `.blockmap` and `latest.yml` attached.
+For a manual hardware check, select your reader's controller, start capture,
+send a known SELECT using your card application, and confirm its command bytes
+and response/status word. Stop while the reader is idle, then start again to
+verify cancellation and handle cleanup. Repeat with another slot/reader when
+available. This hardware check has not yet been performed.
 
-To cut a new release:
+## Structure
 
-1. Bump `version` in `package.json`, run `npm install` so `package-lock.json`
-   picks up the new version (the release job's `npm ci` requires the two to
-   match), then commit both.
-2. Tag the commit `vX.Y.Z` (matching the `package.json` version) and push
-   the tag:
+```text
+CMakeLists.txt  Application, libraries, tests, and runtime deployment
+src/capture/   Direct Win32 USBPcap driver access and a portable stub
+src/core/      Incremental PCAP, USBPcap, and CCID decoding (standard C++ only)
+src/ui/        Qt worker, bounded text queue, and main window
+tests/         Synthetic protocol regression tests and fixture generation
+ui-tests/      Qt asynchronous replay and worker tests
+```
 
-   ```bash
-   git tag -a v1.0.1 -m "Release v1.0.1"
-   git push origin v1.0.1
-   ```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development and validation guidance.
 
-Any tag matching `v*` triggers the workflow. The release notes are generated
-from the commit messages since the previous tag by
-[git-cliff](https://git-cliff.org) (configured in
-[`cliff.toml`](cliff.toml)) and used as the release body — no hand-written
-notes required. Commits are grouped into sections (Features, Bug Fixes,
-Refactor, …) by their subject; using [Conventional Commit](https://www.conventionalcommits.org/)
-prefixes (`feat:`, `fix:`, `docs:`, …) makes that grouping exact, but plain
-prose subjects are categorised on a best-effort basis too.
-
-Run `npm run changelog` to regenerate the project-wide
-[`CHANGELOG.md`](CHANGELOG.md) locally.
-
-## Troubleshooting
-
-- **No USBPcap interfaces listed** — USBPcap is not installed, or the machine
-  has not been rebooted since installing it.
-- **`tshark` not found** — install Wireshark, or click **Locate tshark…** in
-  the header to point the app at your `tshark.exe`.
-- **Frames captured but APDUs are empty** — the CCID payload field can vary
-  between Wireshark builds; adjust the field extraction in
-  `src/main/index.ts` (`handleLine`).
-- **Permission errors on capture** — USBPcap may require running the app as
-  Administrator.
-
-## License
-
-MIT
+The driver wire format and IOCTLs were checked against the upstream
+[USBPcap public header](https://github.com/desowin/usbpcap/blob/master/USBPcapDriver/include/USBPcap.h)
+and [USBPcapCMD capture code](https://github.com/desowin/usbpcap/blob/master/USBPcapCMD/thread.c).
+CCID framing follows the
+[USB-IF CCID specification](https://www.usb.org/sites/default/files/DWG_Smart-Card_CCID_Rev110.pdf).
+No driver or USBPcapCMD implementation is bundled. Application source uses the
+repository's [MIT license](LICENSE); Qt and the separately installed USBPcap retain their
+own licenses.
