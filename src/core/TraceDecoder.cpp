@@ -1,4 +1,5 @@
 #include "TraceDecoder.h"
+#include "CcidChannel.h"
 
 #include <algorithm>
 #include <map>
@@ -12,7 +13,7 @@ namespace {
 using Bytes = std::span<const std::uint8_t>;
 constexpr std::size_t maxPacketBytes = 16 * 1024 * 1024;
 constexpr std::size_t maxCcidPayload = 65544;
-constexpr std::size_t maxChannels = 4096;
+constexpr std::size_t maxChannels = 256;
 constexpr std::size_t maxEndpointStreams = 256;
 
 std::uint16_t read16(Bytes b, std::size_t i, bool little = true) {
@@ -42,40 +43,12 @@ bool knownType(std::uint8_t type, bool incoming) {
     }
 }
 
-// ISO 7816 case 1, 2S, 3S, 4S, 2E, 3E and 4E. This checks framing, not INS.
-bool completeCommandApdu(Bytes data) {
-    if (data.size() == 4 || data.size() == 5) {
-        return true;
-    }
-    if (data.size() < 6) {
-        return false;
-    }
-    if (data[4] != 0) {
-        const auto end = std::size_t{5} + data[4];
-        return data.size() == end || data.size() == end + 1;
-    }
-    if (data.size() < 7) {
-        return false;
-    }
-    if (data.size() == 7) {
-        return true; // Two-byte extended Le, including 0000.
-    }
-    const auto lc = read16(data, 5, false);
-    const auto end = std::size_t{7} + lc;
-    return lc != 0 && (data.size() == end || data.size() == end + 2);
-}
-
 using EndpointKey = std::tuple<std::uint16_t, std::uint16_t, std::uint8_t>;
 using SlotKey = std::tuple<std::uint16_t, std::uint16_t, std::uint8_t>;
 
 struct Assembly {
     std::vector<std::uint8_t> bytes;
     std::uint64_t timestampUs{};
-};
-
-struct Pending {
-    std::uint8_t sequence{};
-    Direction direction{};
 };
 
 } // namespace
@@ -93,19 +66,22 @@ struct TraceDecoder::Impl {
     std::uint32_t snaplen{};
     std::uint64_t timestampUs{};
     std::map<EndpointKey, Assembly> streams;
-    std::map<SlotKey, Pending> pending;
+    TransportMode mode;
+    std::map<SlotKey, CcidChannel> channels;
 
-    explicit Impl(EntryHandler h) : handler(std::move(h)) {
+    Impl(EntryHandler h, TransportMode transport) : handler(std::move(h)), mode(transport) {
         if (!handler) {
             throw std::invalid_argument("A trace entry handler is required.");
         }
     }
 
-    void forgetDevice(std::uint16_t bus, std::uint16_t device) {
+    void invalidateDevice(std::uint16_t bus, std::uint16_t device) {
         const auto sameDevice = [=](const auto& item) {
             return std::get<0>(item.first) == bus && std::get<1>(item.first) == device;
         };
-        std::erase_if(pending, sameDevice);
+        for (auto& item : channels)
+            if (sameDevice(item))
+                for (const auto& entry : item.second.transportGap()) handler(entry);
         std::erase_if(streams, sameDevice);
     }
 
@@ -159,67 +135,20 @@ struct TraceDecoder::Impl {
         needed = captured;
     }
 
-    void emit(Bytes message, const EndpointKey& key, std::uint64_t time, Direction direction) {
-        TraceEntry entry;
-        entry.timestampUs = time;
-        entry.bus = std::get<0>(key);
-        entry.device = std::get<1>(key);
-        entry.endpoint = std::get<2>(key);
-        entry.slot = message[5];
-        entry.sequence = message[6];
-        entry.direction = direction;
-        entry.data.assign(message.begin() + 10, message.end());
-        handler(entry);
-    }
-
     void ccidMessage(Bytes message, const EndpointKey& key, std::uint64_t time) {
-        const bool incoming = (std::get<2>(key) & 0x80) != 0;
         const SlotKey slot{std::get<0>(key), std::get<1>(key), message[5]};
-        const auto sequence = message[6];
-        if (!incoming) {
-            // One outstanding command per slot; any subsequent command replaces
-            // it, including unsupported secure/escape/chaining transactions.
-            pending.erase(slot);
-            const auto body = message.subspan(10);
-            const bool command = message[0] == 0x6f && read16(message, 8) == 0 &&
-                                 completeCommandApdu(body);
-            const bool powerOn = message[0] == 0x62 && body.empty() &&
-                                 message[7] <= 3 && read16(message, 8) == 0;
-            if (!command && !powerOn) {
-                return;
-            }
-            if (pending.size() >= maxChannels) {
-                throw std::runtime_error("Too many simultaneous CCID slots in the capture.");
-            }
-            pending.emplace(slot, Pending{sequence, command ? Direction::Response : Direction::Atr});
-            if (command) {
-                emit(message, key, time, Direction::Command);
-            }
-            return;
+        auto found = channels.find(slot);
+        if (found == channels.end()) {
+            if (channels.size() >= maxChannels)
+                throw std::runtime_error("Too many CCID card slots in the capture.");
+            found = channels.try_emplace(slot, mode).first;
         }
-
-        const auto found = pending.find(slot);
-        if (found == pending.end() || found->second.sequence != sequence) {
-            return; // Orphan responses cannot safely be distinguished from ATRs.
-        }
-        const auto status = message[7];
-        if ((status & 0xc0) == 0x80 && (status & 0x3c) == 0 &&
-            message.size() == 10) {
-            return; // Time extension: the same sequence still awaits its response.
-        }
-        const auto direction = found->second.direction;
-        pending.erase(found);
-        if (message[0] != 0x80 || status != 0 || message[8] != 0 || message[9] != 0) {
-            return; // Failed/inactive slots and CCID chaining are not APDU responses.
-        }
-        const auto body = message.subspan(10);
-        if (direction == Direction::Atr) {
-            if (body.size() >= 2 && body.size() <= 33 && (body[0] == 0x3b || body[0] == 0x3f)) {
-                emit(message, key, time, direction);
-            }
-        } else if (body.size() >= 2 && body.size() <= 65538) {
-            emit(message, key, time, direction);
-        }
+        TraceEntry metadata;
+        metadata.timestampUs = time;
+        metadata.bus = std::get<0>(key);
+        metadata.device = std::get<1>(key);
+        metadata.endpoint = std::get<2>(key);
+        for (const auto& entry : found->second.feed(message, metadata)) handler(entry);
     }
 
     void bulkPayload(Bytes payload, const EndpointKey& key) {
@@ -259,7 +188,7 @@ struct TraceDecoder::Impl {
             if (bodySize > maxCcidPayload) {
                 // This may be unrelated bulk traffic that coincidentally started
                 // with a CCID opcode. Drop state instead of allocating its length.
-                forgetDevice(std::get<0>(key), std::get<1>(key));
+                invalidateDevice(std::get<0>(key), std::get<1>(key));
                 return;
             }
             if (assembly.bytes.size() == 10 + bodySize) {
@@ -289,7 +218,7 @@ struct TraceDecoder::Impl {
         const bool incoming = (b[21] & 0x80) != 0;
         if (completion && read32(b, 10) != 0) {
             // A failed transfer creates a gap; never join fragments across it.
-            forgetDevice(bus, device);
+            invalidateDevice(bus, device);
             return;
         }
         if (incoming != completion) {
@@ -329,7 +258,8 @@ struct TraceDecoder::Impl {
     }
 };
 
-TraceDecoder::TraceDecoder(EntryHandler handler) : impl_(std::make_unique<Impl>(std::move(handler))) {}
+TraceDecoder::TraceDecoder(EntryHandler handler, TransportMode mode)
+    : impl_(std::make_unique<Impl>(std::move(handler), mode)) {}
 TraceDecoder::~TraceDecoder() = default;
 
 void TraceDecoder::feed(std::span<const std::uint8_t> bytes) {
@@ -340,12 +270,21 @@ void TraceDecoder::finish() {
     if (impl_->finished) {
         return;
     }
-    impl_->finished = true;
     if (impl_->stage != Impl::Stage::RecordHeader || !impl_->buffer.empty()) {
+        impl_->finished = true;
         throw std::runtime_error("Capture ended inside a PCAP header or packet (truncated stream).");
     }
+    cancel();
+}
+
+void TraceDecoder::cancel() {
+    if (impl_->finished) return;
+    impl_->finished = true;
+    impl_->buffer.clear();
     impl_->streams.clear();
-    impl_->pending.clear();
+    for (auto& [key, channel] : impl_->channels)
+        for (const auto& entry : channel.finish()) impl_->handler(entry);
+    impl_->channels.clear();
 }
 
 } // namespace apdu

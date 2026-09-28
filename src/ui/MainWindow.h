@@ -39,6 +39,7 @@ private:
     void saveTrace();
 
     QComboBox* devices_;
+    QComboBox* transport_;
     QSpinBox* address_;
     QPushButton* refresh_;
     QPushButton* start_;

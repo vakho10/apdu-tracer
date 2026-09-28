@@ -10,8 +10,8 @@
 
 namespace apdu {
 
-TraceWorker::TraceWorker(Source source, QString path, int device, QObject* parent)
-    : QThread(parent), source_(source), path_(std::move(path)), device_(device) {}
+TraceWorker::TraceWorker(Source source, QString path, int device, QObject* parent, TransportMode mode)
+    : QThread(parent), source_(source), path_(std::move(path)), device_(device), mode_(mode) {}
 
 TraceWorker::~TraceWorker() {
     stop();
@@ -35,7 +35,8 @@ quint64 TraceWorker::droppedLines() {
 
 void TraceWorker::run() {
     try {
-        TraceDecoder decoder([this](const TraceEntry& entry) {
+        bool flushing = false;
+        TraceDecoder decoder([this, &flushing](const TraceEntry& entry) {
             if (entry.direction == Direction::Atr || (device_ != 0 && entry.device != device_))
                 return;
             const auto bytes = QByteArray(reinterpret_cast<const char*>(entry.data.data()),
@@ -47,7 +48,7 @@ void TraceWorker::run() {
                                   .arg(entry.slot).arg(entry.sequence)
                                   .arg(entry.direction == Direction::Command ? QStringLiteral(">>") : QStringLiteral("<<"))
                                   .arg(QString::fromLatin1(bytes.toHex(' ').toUpper()));
-            while (!stopSource_.stop_requested()) {
+            while (flushing || !stopSource_.stop_requested()) {
                 {
                     QMutexLocker lock(&mutex_);
                     if (pending_.size() < 10000 && pendingChars_ + line.size() <= 4 * 1024 * 1024) {
@@ -55,7 +56,7 @@ void TraceWorker::run() {
                         pendingChars_ += line.size();
                         return;
                     }
-                    if (source_ == Source::Live) {
+                    if (source_ == Source::Live || flushing) {
                         ++dropped_;
                         return;
                     }
@@ -64,14 +65,12 @@ void TraceWorker::run() {
                 // replay is lossless; stop can always interrupt backpressure.
                 QThread::msleep(10);
             }
-        });
+        }, mode_);
         const auto token = stopSource_.get_token();
         if (source_ == Source::Live) {
             UsbPcapBackend::capture(path_.toStdString(), token,
                 [&decoder](std::span<const uint8_t> bytes) { decoder.feed(bytes); },
                 [this] { emit ready(QStringLiteral("Capturing on %1").arg(path_)); });
-            // Stopping can cancel a read in the middle of a record. An
-            // intentionally cancelled live stream need not end at EOF.
         } else {
             QFile file(path_);
             if (!file.open(QIODevice::ReadOnly))
@@ -94,6 +93,13 @@ void TraceWorker::run() {
                     QThread::msleep(10);
                 }
             }
+        }
+        if (source_ == Source::Live || token.stop_requested()) {
+            // Stop may interrupt a PCAP record. Discard that partial record,
+            // but publish complete ambiguous commands waiting for a response.
+            // Final queue writes stay bounded and never wait on a stopped UI.
+            flushing = true;
+            decoder.cancel();
         }
     } catch (const std::exception& error) {
         emit failed(QString::fromUtf8(error.what()));

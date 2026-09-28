@@ -4,6 +4,7 @@
 #include <QStringList>
 #include <QThread>
 #include <stop_token>
+#include "core/TraceDecoder.h"
 
 namespace apdu {
 
@@ -13,7 +14,8 @@ class TraceWorker final : public QThread {
     Q_OBJECT
 public:
     enum class Source { Live, File };
-    TraceWorker(Source source, QString path, int device, QObject* parent = nullptr);
+    TraceWorker(Source source, QString path, int device, QObject* parent = nullptr,
+                TransportMode mode = TransportMode::Auto);
     ~TraceWorker() override;
     void stop();
     QStringList takeLines();
@@ -30,6 +32,7 @@ private:
     Source source_;
     QString path_;
     int device_;
+    TransportMode mode_;
     std::stop_source stopSource_;
     QMutex mutex_;
     QStringList pending_;

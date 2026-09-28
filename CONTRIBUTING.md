@@ -36,11 +36,13 @@ use synthetic input and substituted driver calls.
 ## Validation
 
 Run the build and CTest commands above before opening a pull request. The full
-Windows build has five CTest checks:
+Windows build has seven CTest checks:
 
 | Check | Coverage |
 | --- | --- |
 | `decoder_tests` | PCAP parsing, USB direction, CCID framing, APDU validation, and malformed input |
+| `t1_tests` | T=1 framing, checksums, chaining, retransmission, and recovery |
+| `transport_tests` | Complete USBPcap-to-APDU exchanges across CCID and T=1 transport modes |
 | `usbpcap_backend_tests` | Windows capture setup, streaming, cancellation, and error cleanup using substituted Win32 calls |
 | `generate_fixture` | Creates the synthetic capture required by the Qt replay test |
 | `qt_smoke_tests` | Replays a capture through the worker and verifies command and response text in the offscreen window |
@@ -61,7 +63,8 @@ current configuration. Keep tests focused on observable behavior, especially
 decoding boundaries, capture cancellation, and resource cleanup. Add a
 regression case when fixing a bug in these areas.
 
-Live hardware compatibility has not yet been validated. For capture changes,
+Hardware trials exposed chaining and T=1 gaps; the updated reconstruction needs
+a repeat live check. For capture changes,
 perform the [manual hardware check](README.md#verification) when a reader is
 available and report the reader, Windows version, and result in the PR. State
 clearly when validation used synthetic captures only.

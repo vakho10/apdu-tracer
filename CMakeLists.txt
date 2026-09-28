@@ -15,7 +15,7 @@ function(apdu_warnings target)
     endif()
 endfunction()
 
-add_library(apdu_core src/core/TraceDecoder.cpp)
+add_library(apdu_core src/core/TraceDecoder.cpp src/core/CcidChannel.cpp src/core/T1Decoder.cpp)
 target_include_directories(apdu_core PUBLIC src)
 apdu_warnings(apdu_core)
 
@@ -31,6 +31,14 @@ if(BUILD_TESTING)
     target_link_libraries(decoder_tests PRIVATE apdu_core)
     apdu_warnings(decoder_tests)
     add_test(NAME decoder_tests COMMAND decoder_tests)
+    add_executable(t1_tests tests/t1_tests.cpp)
+    target_link_libraries(t1_tests PRIVATE apdu_core)
+    apdu_warnings(t1_tests)
+    add_test(NAME t1_tests COMMAND t1_tests)
+    add_executable(transport_tests tests/transport_tests.cpp)
+    target_link_libraries(transport_tests PRIVATE apdu_core)
+    apdu_warnings(transport_tests)
+    add_test(NAME transport_tests COMMAND transport_tests)
     if(WIN32)
         # This standalone harness replaces driver-facing Win32 calls; it never
         # opens a real capture device and includes the implementation itself.

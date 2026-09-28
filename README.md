@@ -51,8 +51,11 @@ redistributed runtime; this prototype does not produce a release installer.
    hub, not an individual reader. **Refresh** rescans the available controllers.
 2. Leave **USB address** at **All**, or choose the known USB address of your
    reader on that controller. The filter also applies to offline replay.
-3. Click **Start capture**, then use your existing smart-card application.
-4. Click **Stop** before **Save text**. Selected text can also be copied normally.
+3. Leave **Reader transport** on **Auto**. Choose **T=1** for a TPDU reader when
+   starting mid-session, or **APDU** to force ordinary APDU-level interpretation.
+   This setting also applies to offline replay; Auto detects each card slot separately.
+4. Click **Start capture**, then use your existing smart-card application.
+5. Click **Stop** before **Save text**. Selected text can also be copied normally.
 
 ```text
 [12:34:56.001] bus 1 / device 5 / slot 0 / seq 7  >>  00 A4 04 00 00
@@ -66,6 +69,9 @@ does not automatically elevate or install drivers.
 **Open PCAP** reads a classic `.pcap` with USBPcap link type 249. You can also
 pass a capture filename on the command line. Each start/open begins a new
 displayed session. ATRs and reader-control traffic are intentionally omitted.
+CCID fragments and T=1 transport blocks are joined into complete APDUs. A joined
+entry keeps its first fragment's timestamp, and a response keeps the original
+command's sequence number even when continuation transfers use different numbers.
 
 The display retains recent APDUs up to **20,000 rows / 16 MiB of text**, and text
 export saves that displayed portion. The worker queue is bounded by both row
@@ -76,21 +82,29 @@ this initial version cannot count driver-side losses.
 
 ## Initial scope and limitations
 
-- APDU-level **USB CCID** readers using unchained `PC_to_RDR_XfrBlock` and
-  `RDR_to_PC_DataBlock` exchanges. Character/TPDU-level T=0/T=1 reconstruction,
-  CCID APDU chaining, non-CCID/proprietary readers, and contactless protocols
-  outside CCID are not supported.
+- APDU-level **USB CCID** exchanges support both command and response chaining,
+  including the empty continuation requests used for long reads.
+- **T=1 TPDU** exchanges support LRC/CRC checksums and chained command/response
+  I-blocks. R-block acknowledgements, IFS negotiation, and WTX exchanges are
+  omitted from the APDU display; identical I-block retransmissions are suppressed.
+- Character-level exchanges, T=0 TPDU reconstruction, secure PIN commands,
+  vendor escape commands, non-CCID readers, and contactless protocols outside
+  CCID are not supported.
 - CCID framing and APDU lengths are checked conservatively. Reader descriptors
-  are not decoded, so the app cannot establish a reader's exchange level or
-  distinguish every possible unrelated bulk payload with a CCID-like layout.
+  are not decoded. Auto infers T=1 from an IFS handshake, an unambiguous complete
+  command frame, or a chained frame and its acknowledgement. Some byte patterns
+  are valid both as APDUs and T=1 blocks; use the explicit transport setting when
+  needed, particularly **T=1** when capturing mid-session. An ambiguous IFS
+  lookalike may wait for its response or capture end before appearing in Auto mode.
 - Responses require a captured matching command on the same bus, device, slot,
-  and sequence. Starting halfway through an exchange can omit its response.
+  and transfer sequence. Starting halfway through an exchange can omit its response.
 - Composite devices with independent CCID interfaces reusing the same slot
   numbers are not supported yet; response pairing does not distinguish them.
 - Power-on responses are tracked separately as ATRs. Failed CCID commands and
   time-extension notifications are not APDU responses.
 - Partial USB transfers are reassembled; invalid lengths, truncated packets,
-  and malformed input do not become displayed APDUs.
+  invalid T=1 checksums, and incomplete chains do not become displayed APDUs.
+  After damaged T=1 traffic, recovery may omit an exchange until a safe boundary.
 - **PCAPNG is not supported yet**; save/export captures in classic PCAP format.
   Only USBPcap link type 249 is supported, including when replaying elsewhere.
 - Live capture is Windows-only. The decoder and offline Qt viewer are portable.
@@ -107,8 +121,11 @@ cmake --build build/core --config Release
 ctest --test-dir build/core -C Release --output-on-failure
 ```
 
-The full Windows build registers five CTest checks: `decoder_tests`,
-`usbpcap_backend_tests`, `generate_fixture`, `qt_smoke_tests`, and `worker_tests`.
+The full Windows build registers seven CTest checks: `decoder_tests`, `t1_tests`,
+`transport_tests`, `usbpcap_backend_tests`, `generate_fixture`, `qt_smoke_tests`,
+and `worker_tests`. The transport tests synthesize long reads and T=1 exchanges
+matching the reader patterns reported during hardware trials, with generated
+payloads rather than personal card data.
 With the GUI enabled, CTest generates a synthetic `.pcap` and runs the
 Qt window offscreen, replaying it through the worker to verify both directions
 reach the display. Synthetic tests do not establish hardware compatibility.
@@ -121,7 +138,9 @@ For a manual hardware check, select your reader's controller, start capture,
 send a known SELECT using your card application, and confirm its command bytes
 and response/status word. Stop while the reader is idle, then start again to
 verify cancellation and handle cleanup. Repeat with another slot/reader when
-available. This hardware check has not yet been performed.
+available. Earlier hardware trials confirmed capture on two readers and exposed
+the transport gaps addressed here. The updated reassembly still needs a repeat
+live check; automated tests use synthetic captures.
 
 ## Structure
 

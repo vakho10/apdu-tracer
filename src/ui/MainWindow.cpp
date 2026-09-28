@@ -57,6 +57,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     tools->addWidget(open_);
     tools->addWidget(save_);
     tools->addWidget(clear_);
+    tools->addWidget(new QLabel(QStringLiteral("Reader transport:")));
+    transport_ = new QComboBox;
+    transport_->addItem(QStringLiteral("Auto"), static_cast<int>(TransportMode::Auto));
+    transport_->addItem(QStringLiteral("APDU"), static_cast<int>(TransportMode::Apdu));
+    transport_->addItem(QStringLiteral("T=1"), static_cast<int>(TransportMode::T1));
+    transport_->setToolTip(QStringLiteral(
+        "Auto detects T=1 from protocol exchanges. Choose T=1 for a TPDU reader when capturing mid-session, "
+        "or APDU to keep an APDU reader's bytes unchanged."));
+    tools->addWidget(transport_);
     tools->addStretch();
     tools->addWidget(new QLabel(QStringLiteral(">> Sent     << Received")));
     autoScroll_ = new QCheckBox(QStringLiteral("Auto-scroll"));
@@ -72,7 +81,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     trace_->setPlaceholderText(QStringLiteral(
         "Choose a USBPcap controller and start capture, or open a USBPcap .pcap file.\n\n"
         "APDUs appear here as hexadecimal text.\n"
-        "Supports APDU-level USB CCID readers. ATRs and reader-control messages are omitted."));
+        "Supports APDU and T=1 USB CCID readers. ATRs and transport-control messages are omitted."));
     layout->addWidget(trace_, 1);
     layout->addWidget(new QLabel(QStringLiteral(
         "Showing recent APDUs (up to 20,000 rows / 16 MiB of text). Save exports the displayed trace.")));
@@ -135,12 +144,13 @@ void MainWindow::refreshDevices() {
 void MainWindow::startLive() {
     if (worker_ || devices_->currentIndex() < 0) return;
     startWorker(new TraceWorker(TraceWorker::Source::Live, devices_->currentData().toString(),
-                                address_->value(), this));
+                                address_->value(), this, static_cast<TransportMode>(transport_->currentData().toInt())));
 }
 
 void MainWindow::openCapture(const QString& path) {
     if (worker_) return;
-    startWorker(new TraceWorker(TraceWorker::Source::File, path, address_->value(), this));
+    startWorker(new TraceWorker(TraceWorker::Source::File, path, address_->value(), this,
+                                static_cast<TransportMode>(transport_->currentData().toInt())));
 }
 
 void MainWindow::startWorker(TraceWorker* worker) {
@@ -208,6 +218,7 @@ void MainWindow::drainLines() {
 
 void MainWindow::setBusy(bool busy) {
     devices_->setEnabled(!busy);
+    transport_->setEnabled(!busy);
     address_->setEnabled(!busy);
     refresh_->setEnabled(!busy);
     start_->setEnabled(!busy && devices_->count() > 0);

@@ -23,7 +23,7 @@ void append32(QByteArray& bytes, quint32 value) {
 
 // Put many complete CCID commands inside one USB record. The decoder delivers
 // them in one feed() call, exercising callback-level backpressure.
-void writeCapture(const QString& path, int count, bool extended) {
+void writeCapture(const QString& path, int count, bool extended, bool finalProbe = false) {
     QByteArray apdu = QByteArray::fromHex(extended ? "00DA000000FFFF" : "00A40400");
     if (extended) apdu.append(QByteArray(65537, '\0')); // Lc=65535, Le=0000
     QByteArray message;
@@ -31,6 +31,15 @@ void writeCapture(const QString& path, int count, bool extended) {
     append32(message, static_cast<quint32>(apdu.size()));
     message.append(QByteArray(5, '\0'));
     message.append(apdu);
+    QByteArray probe;
+    if (finalProbe) {
+        probe.append('\x6f');
+        append32(probe, 5);
+        probe.append('\0');   // slot
+        probe.append('\x29'); // sequence 41
+        probe.append(QByteArray(3, '\0'));
+        probe.append(QByteArray::fromHex("00C101FE3E")); // raw-valid APDU / IFS request
+    }
     QByteArray packet;
     append16(packet, 27);
     packet.append(QByteArray(8, '\0')); // IRP
@@ -41,8 +50,9 @@ void writeCapture(const QString& path, int count, bool extended) {
     append16(packet, 5); // device
     packet.append('\x01'); // endpoint
     packet.append('\x03'); // bulk
-    append32(packet, static_cast<quint32>(message.size() * count));
+    append32(packet, static_cast<quint32>(message.size() * count + probe.size()));
     for (int i = 0; i < count; ++i) packet.append(message);
+    packet.append(probe);
     QByteArray file;
     append32(file, 0xa1b2c3d4);
     append16(file, 2);
@@ -99,6 +109,26 @@ void cancellationWithFullQueue(const QString& path) {
             "Worker did not bound long APDUs or cancel backpressure safely");
 }
 
+void cancellationFlushesProbe(const QString& path) {
+    apdu::TraceWorker worker(apdu::TraceWorker::Source::File, path, 0);
+    QString failure;
+    // The main thread intentionally does not drain. Read failure only after
+    // wait() joins the worker, so this direct connection has no concurrent read.
+    QObject::connect(&worker, &apdu::TraceWorker::failed, &worker,
+                     [&](const QString& message) { failure = message; }, Qt::DirectConnection);
+    worker.start();
+    require(!worker.wait(200), "Probe fixture finished instead of pausing on a full replay batch");
+    worker.stop();
+    require(worker.wait(2000), "Flushing the pending probe blocked cancellation");
+    const auto lines = worker.takeLines();
+    require(failure.isEmpty(), "Cancelling a pending probe reported a capture failure");
+    require(lines.size() == 1001 && worker.droppedLines() == 0,
+            "Stop lost the buffered raw-valid command or prior APDU entries");
+    require(lines.back().contains(QStringLiteral("seq 41"))
+            && lines.back().endsWith(QStringLiteral(">>  00 C1 01 FE 3E")),
+            "Stop did not preserve the unresolved probe as its original raw APDU");
+}
+
 void boundedWindow(const QString& path) {
     apdu::MainWindow window;
     QEventLoop loop;
@@ -123,12 +153,15 @@ int main(int argc, char* argv[]) {
         require(directory.isValid(), "Could not create fixture directory");
         const auto small = directory.filePath(QStringLiteral("many.pcap"));
         const auto large = directory.filePath(QStringLiteral("long.pcap"));
+        const auto probe = directory.filePath(QStringLiteral("probe.pcap"));
         writeCapture(small, 12000, false);
         writeCapture(large, 100, true);
+        writeCapture(probe, 1000, false, true);
         losslessReplay(small);
         cancellationWithFullQueue(large);
+        cancellationFlushesProbe(probe);
         boundedWindow(large);
-        std::cout << "Lossless replay, bounded text, and cancellation passed\n";
+        std::cout << "Lossless replay, bounded text, cancellation, and pending probe flush passed\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
