@@ -6,7 +6,9 @@
 
 #include <QApplication>
 #include <QEventLoop>
+#include <QLabel>
 #include <QPlainTextEdit>
+#include <QPushButton>
 #include <QScrollBar>
 #include <QTextBlock>
 #include <QTextDocument>
@@ -291,6 +293,50 @@ void traceViewKeepsPosition() {
             "Auto-scroll did not follow the newest row");
 }
 
+QPushButton* button(QWidget& window, const QString& text) {
+    for (auto* candidate : window.findChildren<QPushButton*>())
+        if (candidate->text() == text) return candidate;
+    throw std::runtime_error("Button not found");
+}
+
+QLabel* apduCount(QWidget& window) {
+    for (auto* label : window.findChildren<QLabel*>())
+        if (label->text().endsWith(QStringLiteral(" APDUs"))) return label;
+    throw std::runtime_error("APDU count label not found");
+}
+
+void clearDuringSession(const QString& path) {
+    apdu::MainWindow window;
+    QEventLoop loop;
+    QTimer deadline;
+    bool finished = false, success = false;
+    QObject::connect(&window, &apdu::MainWindow::sessionFinished, &loop,
+                     [&](bool ok) { finished = true; success = ok; loop.quit(); });
+    QObject::connect(&deadline, &QTimer::timeout, &loop, &QEventLoop::quit);
+    deadline.setSingleShot(true);
+    deadline.start(15000);
+
+    window.openCapture(path); // 12,000 APDUs, replayed in backpressured batches.
+    auto* clear = button(window, QStringLiteral("Clear"));
+    auto* stop = button(window, QStringLiteral("Stop"));
+    require(clear->isEnabled(), "Clear was disabled while a session was running");
+
+    while (window.traceText().isEmpty() && deadline.isActive())
+        QApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+    require(!finished && stop->isEnabled(), "Replay ended before Clear could be tested mid-session");
+    clear->click();
+    require(window.traceText().isEmpty() && apduCount(window)->text() == QStringLiteral("0 APDUs"),
+            "Clear did not empty the display and counter during a session");
+    require(stop->isEnabled(), "Clear stopped the running session");
+
+    if (!finished) loop.exec();
+    require(finished && success, "Session did not finish successfully after Clear");
+    const auto shown = window.traceText().split(QLatin1Char('\n'), Qt::SkipEmptyParts).size();
+    require(shown > 0 && shown < 12000, "Display did not continue with only APDUs after Clear");
+    require(apduCount(window)->text() == QStringLiteral("%1 APDUs").arg(shown),
+            "APDU counter does not match the rows shown after Clear");
+}
+
 void boundedWindow(const QString& path) {
     apdu::MainWindow window;
     QEventLoop loop;
@@ -325,8 +371,9 @@ int main(int argc, char* argv[]) {
         rawCaptureReplays(directory.filePath(QStringLiteral("raw.pcap")));
         boundedWindow(large);
         traceViewKeepsPosition();
+        clearDuringSession(small);
         std::cout << "Lossless replay, bounded text, cancellation, pending probe flush, raw capture replay, "
-                     "and trace view position passed\n";
+                     "trace view position, and Clear during a session passed\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

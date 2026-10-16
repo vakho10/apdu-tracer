@@ -70,7 +70,9 @@ redistributed runtime; this prototype does not produce a release installer.
    in half is trimmed so the file ends on a complete record. The raw file contains
    what the driver captured: only the selected USB address, or the whole hub for **All**.
 5. Click **Start capture**, then use your existing smart-card application.
-6. Click **Stop** before **Save text**. Selected text can also be copied normally.
+6. **Clear** empties the display and the APDU counter at any time. During a capture
+   the capture keeps running and only APDUs after the click are shown.
+7. Click **Stop** before **Save text**. Selected text can also be copied normally.
 
 ```text
 [12:34:56.001] bus 1 / device 5 / slot 0 / seq 7  >>  00 A4 04 00 00
