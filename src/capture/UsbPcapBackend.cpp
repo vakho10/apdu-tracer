@@ -10,8 +10,12 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+// Same minimum as apdu_windows_target() in CMakeLists.txt: Windows 10.
 #ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0601
+#define _WIN32_WINNT 0x0A00
+#endif
+#if _WIN32_WINNT < 0x0A00
+#error "APDU Tracer requires Windows 10 or newer (_WIN32_WINNT >= 0x0A00)."
 #endif
 #include <windows.h>
 #include <winioctl.h>

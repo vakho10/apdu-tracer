@@ -1,8 +1,16 @@
 // Compile this file as a standalone Windows test executable. It includes the
 // backend with only its driver-facing Win32 calls replaced. Real Win32 events
 // and waits exercise cancellation without opening or configuring any device.
+// CMake normally provides these through apdu_windows_target().
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#endif
 #include <windows.h>
 #include <winioctl.h>
 
