@@ -65,6 +65,7 @@ if(APDU_BUILD_GUI)
     qt_standard_project_setup()
     add_library(apdu_ui
         src/ui/RawCaptureWriter.cpp src/ui/RawCaptureWriter.h
+        src/ui/TraceView.cpp src/ui/TraceView.h
         src/ui/TraceWorker.cpp src/ui/TraceWorker.h
         src/ui/MainWindow.cpp src/ui/MainWindow.h
     )

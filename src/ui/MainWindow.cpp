@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "TraceView.h"
 #include "TraceWorker.h"
 #include "capture/UsbPcapBackend.h"
 
@@ -13,12 +14,8 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSaveFile>
-#include <QScrollBar>
 #include <QSpinBox>
 #include <QStatusBar>
-#include <QTextBlock>
-#include <QTextCursor>
-#include <QTextDocument>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <exception>
@@ -99,7 +96,6 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     trace_->setReadOnly(true);
     trace_->setLineWrapMode(QPlainTextEdit::NoWrap);
     trace_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
-    trace_->setMaximumBlockCount(20000);
     trace_->setPlaceholderText(QStringLiteral(
         "Choose your reader (or its USB root hub) and start capture, or open a USBPcap .pcap file.\n\n"
         "APDUs appear here as hexadecimal text.\n"
@@ -246,27 +242,7 @@ void MainWindow::drainLines() {
     if (!worker_) return;
     const auto lines = worker_->takeLines();
     if (!lines.isEmpty()) {
-        const int previous = trace_->verticalScrollBar()->value();
-        trace_->appendPlainText(lines.join('\n'));
-        // Row limits alone allow gigabytes of long extended APDUs. Trim
-        // complete oldest rows to bound the document's UTF-16 text as well.
-        auto* document = trace_->document();
-        constexpr int maxCharacters = 8 * 1024 * 1024;
-        int removeCharacters = 0;
-        auto block = document->begin();
-        while (document->characterCount() - removeCharacters > maxCharacters && block.next().isValid()) {
-            removeCharacters += block.length();
-            block = block.next();
-        }
-        if (removeCharacters > 0) {
-            QTextCursor cursor(document);
-            cursor.setPosition(removeCharacters, QTextCursor::KeepAnchor);
-            cursor.removeSelectedText();
-        }
-        if (autoScroll_->isChecked())
-            trace_->verticalScrollBar()->setValue(trace_->verticalScrollBar()->maximum());
-        else
-            trace_->verticalScrollBar()->setValue(previous);
+        appendTraceRows(*trace_, lines, autoScroll_->isChecked());
         total_ += static_cast<quint64>(lines.size());
         count_->setText(QStringLiteral("%1 APDUs").arg(total_));
     }
