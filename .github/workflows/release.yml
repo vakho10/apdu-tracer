@@ -56,11 +56,16 @@ jobs:
         run: |
           $name = "APDUTracer-${{ steps.version.outputs.version }}-win64"
           $root = "package/APDUTracer-${{ steps.version.outputs.version }}"
-          if (-not (Test-Path "$root/bin/APDUTracer.exe")) { throw 'APDUTracer.exe is missing from the install tree' }
-          Copy-Item LICENSE, README.md $root
+          # The install step adds LICENSE, README.md and the Qt license notices.
+          foreach ($file in 'bin/APDUTracer.exe', 'LICENSE', 'THIRD-PARTY-NOTICES.md',
+                            'licenses/LGPL-3.0.txt', 'licenses/GPL-3.0.txt') {
+            if (-not (Test-Path "$root/$file")) { throw "$file is missing from the install tree" }
+          }
+          if (Test-Path "$root/bin/opengl32sw.dll") { throw 'opengl32sw.dll should not be deployed' }
           Compress-Archive -Path $root -DestinationPath "$name.zip"
           $hash = (Get-FileHash "$name.zip" -Algorithm SHA256).Hash.ToLower()
-          "$hash  $name.zip" | Set-Content -Encoding ascii "$name.zip.sha256"
+          # LF only, so `sha256sum -c` also works on Linux, macOS and WSL.
+          [IO.File]::WriteAllText("$PWD/$name.zip.sha256", "$hash  $name.zip`n")
 
       - uses: actions/upload-artifact@v4
         with:

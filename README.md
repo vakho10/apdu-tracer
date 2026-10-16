@@ -14,6 +14,10 @@ portable `APDUTracer-<version>-win64.zip` with a `.sha256` checksum. Extract it
 and run `bin\APDUTracer.exe`; the Qt runtime is included. Install the
 [USBPcap driver](https://desowin.org/usbpcap/) separately for live capture.
 
+To verify a download, compare the hash with the `.sha256` file. In PowerShell,
+run `Get-FileHash APDUTracer-<version>-win64.zip`. On Linux, macOS or WSL, run
+`sha256sum -c APDUTracer-<version>-win64.zip.sha256`.
+
 ## Build on Windows
 
 Requirements:
@@ -49,8 +53,10 @@ cmake --install build/windows --config Release --prefix $apduDist
 On Windows the install step uses Qt's deployment support to collect runtime
 DLLs and plugins. It does not install or bundle the USBPcap driver. Qt's
 [Windows deployment guide](https://doc.qt.io/qt-6/windows-deployment.html)
-describes runtime deployment. Keep Qt and third-party license notices with any
-redistributed runtime. Releases are portable zip files, not installers.
+describes runtime deployment. The install step also copies `LICENSE`,
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) and the Qt license texts in
+`licenses/`; keep them with any redistributed runtime. Releases are portable
+zip files, not installers.
 
 ## Use
 
@@ -201,4 +207,5 @@ CCID framing follows the
 [USB-IF CCID specification](https://www.usb.org/sites/default/files/DWG_Smart-Card_CCID_Rev110.pdf).
 No driver or USBPcapCMD implementation is bundled. Application source uses the
 repository's [MIT license](LICENSE); Qt and the separately installed USBPcap retain their
-own licenses.
+own licenses. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for the
+components shipped in release packages.

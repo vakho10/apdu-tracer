@@ -103,8 +103,14 @@ if(APDU_BUILD_GUI)
     endif()
 
     install(TARGETS APDUTracer RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    # The redistributed Qt runtime requires its license texts and notices.
+    install(FILES LICENSE README.md THIRD-PARTY-NOTICES.md DESTINATION .)
+    install(DIRECTORY licenses DESTINATION .)
     if(WIN32)
-        qt_generate_deploy_app_script(TARGET APDUTracer OUTPUT_SCRIPT deploy_script)
+        # Qt Widgets renders with the raster engine, so the 20 MB software
+        # OpenGL fallback (opengl32sw.dll) is never loaded.
+        qt_generate_deploy_app_script(TARGET APDUTracer OUTPUT_SCRIPT deploy_script
+            DEPLOY_TOOL_OPTIONS --no-opengl-sw)
         install(SCRIPT ${deploy_script})
     endif()
 endif()
