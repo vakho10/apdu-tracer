@@ -1,10 +1,15 @@
 #include "core/TraceDecoder.h"
 #include "ui/MainWindow.h"
 #include "ui/RawCaptureWriter.h"
+#include "ui/TraceView.h"
 #include "ui/TraceWorker.h"
 
 #include <QApplication>
 #include <QEventLoop>
+#include <QPlainTextEdit>
+#include <QScrollBar>
+#include <QTextBlock>
+#include <QTextDocument>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -232,6 +237,60 @@ void rawCaptureReplays(const QString& path) {
             "Opening an unwritable raw capture path did not report an error");
 }
 
+QStringList rows(int first, int count) {
+    QStringList result;
+    for (int i = first; i < first + count; ++i) result.append(QStringLiteral("row %1").arg(i));
+    return result;
+}
+
+QString firstVisibleRow(QPlainTextEdit& view) {
+    return view.cursorForPosition(QPoint(2, 2)).block().text();
+}
+
+void traceViewKeepsPosition() {
+    QPlainTextEdit view;
+    view.setLineWrapMode(QPlainTextEdit::NoWrap);
+    view.setAttribute(Qt::WA_DontShowOnScreen);
+    view.resize(400, 200);
+    view.show();
+    const apdu::TraceLimits limits{100, 1024 * 1024};
+
+    apdu::appendTraceRows(view, rows(0, 100), false, limits);
+    view.verticalScrollBar()->setValue(40);
+    QApplication::processEvents();
+    require(firstVisibleRow(view) == QStringLiteral("row 40"), "Fixture could not scroll to row 40");
+
+    // 30 new rows trim rows 0-29 above the view. Reading must stay on row 40.
+    apdu::appendTraceRows(view, rows(100, 30), false, limits);
+    QApplication::processEvents();
+    require(view.document()->blockCount() == 100, "Row limit was not applied");
+    require(view.document()->firstBlock().text() == QStringLiteral("row 30"), "Oldest rows were not trimmed");
+    require(firstVisibleRow(view) == QStringLiteral("row 40"),
+            "Trimming old rows moved the view while auto-scroll was off");
+
+    // Rows 30-129 hold about 730 characters. Ten more rows exceed a 780
+    // character limit, so a few rows starting at row 30 are trimmed while
+    // row 40 remains. The character limit must anchor the view the same way.
+    apdu::appendTraceRows(view, rows(130, 10), false, {1000, 780});
+    QApplication::processEvents();
+    require(view.document()->characterCount() <= 780, "Character limit was not applied");
+    require(view.document()->firstBlock().text() != QStringLiteral("row 30"),
+            "Character limit did not trim the oldest rows");
+    require(firstVisibleRow(view) == QStringLiteral("row 40"),
+            "Character trimming moved the view while auto-scroll was off");
+
+    // When rows above the first visible row run out, the view stays at the top.
+    apdu::appendTraceRows(view, rows(140, 90), false, limits);
+    QApplication::processEvents();
+    require(view.verticalScrollBar()->value() == 0, "View was not clamped to the oldest remaining row");
+
+    // Following the trace still shows the newest row.
+    apdu::appendTraceRows(view, rows(230, 5), true, limits);
+    QApplication::processEvents();
+    require(view.verticalScrollBar()->value() == view.verticalScrollBar()->maximum(),
+            "Auto-scroll did not follow the newest row");
+}
+
 void boundedWindow(const QString& path) {
     apdu::MainWindow window;
     QEventLoop loop;
@@ -265,7 +324,9 @@ int main(int argc, char* argv[]) {
         cancellationFlushesProbe(probe);
         rawCaptureReplays(directory.filePath(QStringLiteral("raw.pcap")));
         boundedWindow(large);
-        std::cout << "Lossless replay, bounded text, cancellation, pending probe flush, and raw capture replay passed\n";
+        traceViewKeepsPosition();
+        std::cout << "Lossless replay, bounded text, cancellation, pending probe flush, raw capture replay, "
+                     "and trace view position passed\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
