@@ -73,6 +73,15 @@ if(APDU_BUILD_GUI)
     apdu_warnings(apdu_ui)
     qt_add_executable(APDUTracer WIN32 src/main.cpp)
     target_link_libraries(APDUTracer PRIVATE apdu_ui)
+    # Logo renders from assets/generate_icons.py: PNGs for the window icon
+    # (no Qt SVG module needed) and an .ico embedded in the executable.
+    set(apdu_icon_sizes 16 24 32 48 64 128 256)
+    list(TRANSFORM apdu_icon_sizes PREPEND "assets/icons/apdu-tracer-" OUTPUT_VARIABLE apdu_icon_files)
+    list(TRANSFORM apdu_icon_files APPEND ".png")
+    qt_add_resources(APDUTracer "app_icons" PREFIX "/" BASE assets FILES ${apdu_icon_files})
+    if(WIN32)
+        target_sources(APDUTracer PRIVATE assets/apdu-tracer.rc)
+    endif()
     # project() VERSION is the single source of the application version.
     target_compile_definitions(APDUTracer PRIVATE APDU_TRACER_VERSION="${PROJECT_VERSION}")
     apdu_warnings(APDUTracer)

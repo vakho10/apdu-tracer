@@ -1,0 +1,3 @@
+// Executable icon shown by Explorer, the taskbar and shortcuts.
+// Regenerate apdu-tracer.ico with assets/generate_icons.py.
+IDI_APP_ICON ICON "apdu-tracer.ico"

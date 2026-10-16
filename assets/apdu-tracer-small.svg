@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title">
+  <!-- Simplified apdu-tracer.svg for 16-32 px icons: thicker lines, no pulse or shine. -->
+  <title id="title">APDU Tracer</title>
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbe594"/>
+      <stop offset="0.45" stop-color="#e6b84a"/>
+      <stop offset="1" stop-color="#b8860b"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="36" width="224" height="184" rx="34" fill="url(#gold)" stroke="#6b4e0f" stroke-width="16"/>
+  <g fill="none" stroke="#6b4e0f" stroke-width="16" stroke-linecap="butt">
+    <rect x="92" y="76" width="72" height="104" rx="8"/>
+    <path d="M20 128H92M164 128H236M128 40V76M128 180V216"/>
+  </g>
+</svg>
