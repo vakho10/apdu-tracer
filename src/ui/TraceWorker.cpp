@@ -10,8 +10,10 @@
 
 namespace apdu {
 
-TraceWorker::TraceWorker(Source source, QString path, int device, QObject* parent, TransportMode mode)
-    : QThread(parent), source_(source), path_(std::move(path)), device_(device), mode_(mode) {}
+TraceWorker::TraceWorker(Source source, QString path, int device, QObject* parent, TransportMode mode,
+                         quint32 driverBufferBytes)
+    : QThread(parent), source_(source), path_(std::move(path)), device_(device), mode_(mode),
+      driverBufferBytes_(driverBufferBytes) {}
 
 TraceWorker::~TraceWorker() {
     stop();
@@ -68,9 +70,15 @@ void TraceWorker::run() {
         }, mode_);
         const auto token = stopSource_.get_token();
         if (source_ == Source::Live) {
+            CaptureOptions options;
+            options.address = device_;
+            options.bufferBytes = driverBufferBytes_;
             UsbPcapBackend::capture(path_.toStdString(), token,
                 [&decoder](std::span<const uint8_t> bytes) { decoder.feed(bytes); },
-                [this] { emit ready(QStringLiteral("Capturing on %1").arg(path_)); });
+                [this] {
+                    emit ready(device_ ? QStringLiteral("Capturing USB address %1 on %2").arg(device_).arg(path_)
+                                       : QStringLiteral("Capturing on %1").arg(path_));
+                }, options);
         } else {
             QFile file(path_);
             if (!file.open(QIODevice::ReadOnly))

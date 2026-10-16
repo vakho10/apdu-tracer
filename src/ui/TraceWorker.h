@@ -4,6 +4,7 @@
 #include <QStringList>
 #include <QThread>
 #include <stop_token>
+#include "capture/UsbPcapBackend.h"
 #include "core/TraceDecoder.h"
 
 namespace apdu {
@@ -14,8 +15,11 @@ class TraceWorker final : public QThread {
     Q_OBJECT
 public:
     enum class Source { Live, File };
+    // For live capture a non-zero device also becomes the USBPcap driver's
+    // address filter, so other devices' traffic never fills its buffer.
     TraceWorker(Source source, QString path, int device, QObject* parent = nullptr,
-                TransportMode mode = TransportMode::Auto);
+                TransportMode mode = TransportMode::Auto,
+                quint32 driverBufferBytes = CaptureOptions::defaultBufferBytes);
     ~TraceWorker() override;
     void stop();
     QStringList takeLines();
@@ -33,6 +37,7 @@ private:
     QString path_;
     int device_;
     TransportMode mode_;
+    quint32 driverBufferBytes_;
     std::stop_source stopSource_;
     QMutex mutex_;
     QStringList pending_;

@@ -47,10 +47,18 @@ redistributed runtime; this prototype does not produce a release installer.
 
 ## Use
 
-1. Select a **USB controller** (`USBPcap1`, `USBPcap2`, …). USBPcap captures a root
-   hub, not an individual reader. **Refresh** rescans the available controllers.
-2. Leave **USB address** at **All**, or choose the known USB address of your
-   reader on that controller. The filter also applies to offline replay.
+1. Select a **Capture device**. Each USBPcap root hub (`USBPcap1`, `USBPcap2`, …)
+   is listed as *entire root hub*, followed by the devices currently attached to it,
+   e.g. `USBPcap2 – Smart card reader (address 5)`. Devices behind external hubs
+   are included. Composite devices are named after their functions. **Refresh**
+   rescans after plugging a reader in; listing never starts a capture or blocks
+   one already running in another program.
+2. Selecting a device sets **USB address** to that device. During live capture the
+   USBPcap driver then records only that address, so storage, webcam, or other
+   traffic on the same hub never fills its buffer. **All** captures the whole
+   hub, including devices attached after capture starts. A device gets a new
+   address when it is reconnected, so refresh and reselect it. The address filter
+   also applies to offline replay.
 3. Leave **Reader transport** on **Auto**. Choose **T=1** for a TPDU reader when
    starting mid-session, or **APDU** to force ordinary APDU-level interpretation.
    This setting also applies to offline replay; Auto detects each card slot separately.
@@ -77,8 +85,10 @@ The display retains recent APDUs up to **20,000 rows / 16 MiB of text**, and tex
 export saves that displayed portion. The worker queue is bounded by both row
 count and text size; if the display cannot keep up
 with live APDU traffic, the status bar reports the number of dropped display
-entries. USBPcap itself can lose packets when its driver buffer overflows;
-this initial version cannot count driver-side losses.
+entries. USBPcap itself silently drops packets when its kernel buffer
+overflows, and this app cannot count those losses. **Driver buffer** (default
+16 MiB, 4–128 MiB of non-paged memory) sets that buffer for live capture; raise
+it for busy hubs, or capture only the reader's address.
 
 ## Initial scope and limitations
 
@@ -133,15 +143,21 @@ With the GUI enabled, CTest generates a synthetic `.pcap` and runs the
 Qt window offscreen, replaying it through the worker to verify both directions
 reach the display. Synthetic tests do not establish hardware compatibility.
 On Windows a backend harness substitutes the driver-facing Win32 calls to test
-configuration, streaming, idle-read cancellation, and cleanup on errors.
+configuration, streaming, idle-read cancellation, and cleanup on errors. It
+checks the exact 17-byte address filter sent for **All** and for specific
+addresses, the configured driver buffer size, and the device-listing helpers.
 Worker tests also exercise lossless replay of a record containing 12,000 commands,
 cancellation under backpressure, and bounded display memory for long APDUs.
 
-For a manual hardware check, select your reader's controller, start capture,
+For a manual hardware check, select your reader from the device list (check
+that its name and address match Device Manager or USBPcapCMD), start capture,
 send a known SELECT using your card application, and confirm its command bytes
 and response/status word. Stop while the reader is idle, then start again to
-verify cancellation and handle cleanup. Repeat with another slot/reader when
-available. Earlier hardware trials confirmed capture on two readers and exposed
+verify cancellation and handle cleanup. While capturing only the reader,
+copy a file to a USB drive on the same hub and confirm the trace is unaffected.
+Repeat with another slot/reader when available.
+The per-device list and driver-side address filter have not yet been tried on
+hardware. Earlier hardware trials confirmed capture on two readers and exposed
 the transport gaps addressed here. The updated reassembly still needs a repeat
 live check; automated tests use synthetic captures.
 
@@ -160,7 +176,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development and validation guidance.
 
 The driver wire format and IOCTLs were checked against the upstream
 [USBPcap public header](https://github.com/desowin/usbpcap/blob/master/USBPcapDriver/include/USBPcap.h)
-and [USBPcapCMD capture code](https://github.com/desowin/usbpcap/blob/master/USBPcapCMD/thread.c).
+and USBPcapCMD's [capture](https://github.com/desowin/usbpcap/blob/master/USBPcapCMD/thread.c)
+and [device enumeration](https://github.com/desowin/usbpcap/blob/master/USBPcapCMD/enum.c) code.
 CCID framing follows the
 [USB-IF CCID specification](https://www.usb.org/sites/default/files/DWG_Smart-Card_CCID_Rev110.pdf).
 No driver or USBPcapCMD implementation is bundled. Application source uses the
