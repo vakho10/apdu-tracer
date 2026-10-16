@@ -7,11 +7,10 @@
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QFileDialog>
-#include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMessageBox>
-#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSaveFile>
 #include <QSpinBox>
@@ -85,33 +84,43 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         "Kernel memory USBPcap reserves for live capture. The driver silently drops packets "
         "when it fills; choose more for busy hubs or when capturing the whole root hub."));
     tools->addWidget(buffer_);
-    tools->addStretch();
-    tools->addWidget(new QLabel(QStringLiteral(">> Sent     << Received")));
+    tools->addSpacing(12);
+    filter_ = new QLineEdit;
+    filter_->setPlaceholderText(QStringLiteral("Filter: bytes (90 00, A0 00 00 00 03) or text (SELECT, not found)"));
+    filter_->setClearButtonEnabled(true);
+    filter_->setToolTip(QStringLiteral(
+        "Shows only APDUs containing these hex bytes, or whose Info column contains this text."));
+    tools->addWidget(filter_, 1);
     autoScroll_ = new QCheckBox(QStringLiteral("Auto-scroll"));
     autoScroll_->setChecked(true);
     tools->addWidget(autoScroll_);
     layout->addLayout(tools);
 
-    trace_ = new QPlainTextEdit;
-    trace_->setReadOnly(true);
-    trace_->setLineWrapMode(QPlainTextEdit::NoWrap);
-    trace_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    trace_ = new TraceView;
     trace_->setPlaceholderText(QStringLiteral(
         "Choose your reader (or its USB root hub) and start capture, or open a USBPcap .pcap file.\n\n"
-        "APDUs appear here as hexadecimal text.\n"
+        "Each APDU appears as a row: >> sent to the card, << received from it.\n"
         "Supports APDU and T=1 USB CCID readers. ATRs and transport-control messages are omitted."));
     layout->addWidget(trace_, 1);
     layout->addWidget(new QLabel(QStringLiteral(
-        "Showing recent APDUs (up to 20,000 rows / 16 MiB of text). Save exports the displayed trace.")));
+        "Showing recent APDUs (up to 20,000 rows / 8 MiB of APDU data). "
+        "Save and Copy (Ctrl+C) export the rows shown, with all bytes.")));
     setCentralWidget(central);
     status_ = new QLabel(QStringLiteral("Ready"));
     count_ = new QLabel(QStringLiteral("0 APDUs"));
+    shown_ = new QLabel;
+    shown_->hide();
     statusBar()->addWidget(status_, 1);
+    statusBar()->addPermanentWidget(shown_);
     statusBar()->addPermanentWidget(count_);
 
     poll_ = new QTimer(this);
     poll_->setInterval(50);
-    connect(poll_, &QTimer::timeout, this, &MainWindow::drainLines);
+    connect(poll_, &QTimer::timeout, this, &MainWindow::drainRows);
+    connect(filter_, &QLineEdit::textChanged, this, [this](const QString& text) {
+        trace_->setFilterText(text);
+        updateShownCount();
+    });
     connect(refresh_, &QPushButton::clicked, this, &MainWindow::refreshDevices);
     connect(devices_, &QComboBox::currentIndexChanged, this, [this](int index) {
         if (index >= 0) address_->setValue(devices_->itemData(index, addressRole).toInt());
@@ -159,7 +168,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     event->accept();
 }
 
-QString MainWindow::traceText() const { return trace_->toPlainText(); }
+QString MainWindow::traceText() const { return trace_->allText(); }
 
 void MainWindow::refreshDevices() {
     const auto previousPath = devices_->currentData().toString();
@@ -220,8 +229,8 @@ void MainWindow::startWorker(TraceWorker* worker) {
         status_->setToolTip(message);
     });
     connect(worker, &QThread::finished, this, [this, worker] {
-        drainLines();
-        const auto dropped = worker->droppedLines();
+        drainRows();
+        const auto dropped = worker->droppedRows();
         poll_->stop();
         worker_ = nullptr;
         worker->deleteLater();
@@ -241,15 +250,16 @@ void MainWindow::startWorker(TraceWorker* worker) {
     worker->start();
 }
 
-void MainWindow::drainLines() {
+void MainWindow::drainRows() {
     if (!worker_) return;
-    const auto lines = worker_->takeLines();
-    if (!lines.isEmpty()) {
-        appendTraceRows(*trace_, lines, autoScroll_->isChecked());
-        total_ += static_cast<quint64>(lines.size());
+    auto rows = worker_->takeRows();
+    if (!rows.isEmpty()) {
+        total_ += static_cast<quint64>(rows.size());
+        trace_->appendRows(std::move(rows), autoScroll_->isChecked());
         count_->setText(QStringLiteral("%1 APDUs").arg(total_));
+        updateShownCount();
     }
-    const auto dropped = worker_->droppedLines();
+    const auto dropped = worker_->droppedRows();
     if (dropped && !failed_)
         status_->setText(QStringLiteral("Capture active — %1 APDUs dropped while display was busy").arg(dropped));
 }
@@ -271,22 +281,29 @@ void MainWindow::clearTrace() {
     if (worker_) {
         // The capture keeps running. Rows queued before the click are
         // discarded too, so nothing older than the click appears afterwards.
-        worker_->takeLines();
+        worker_->takeRows();
         clearedDuringSession_ = true;
     }
-    trace_->clear();
+    trace_->clearRows();
     total_ = 0;
     count_->setText(QStringLiteral("0 APDUs"));
+    updateShownCount();
     save_->setEnabled(false);
     status_->setToolTip({});
 }
 
+void MainWindow::updateShownCount() {
+    // The APDU count stays the total; a filter adds how many rows it shows.
+    shown_->setVisible(!filter_->text().trimmed().isEmpty());
+    shown_->setText(QStringLiteral("%1 shown").arg(trace_->shownRowCount()));
+}
+
 void MainWindow::saveTrace() {
-    const auto path = QFileDialog::getSaveFileName(this, QStringLiteral("Save displayed APDUs"),
+    const auto path = QFileDialog::getSaveFileName(this, QStringLiteral("Save shown APDUs"),
         QStringLiteral("apdu-trace.txt"), QStringLiteral("Text files (*.txt)"));
     if (path.isEmpty()) return;
     QSaveFile file(path);
-    const auto text = (traceText() + '\n').toUtf8();
+    const auto text = (trace_->shownText() + '\n').toUtf8();
     if (!file.open(QIODevice::WriteOnly) || file.write(text) != text.size() || !file.commit())
         QMessageBox::warning(this, QStringLiteral("Could not save trace"), file.errorString());
     else

@@ -3,7 +3,6 @@
 #include "capture/UsbPcapBackend.h"
 #include "core/TraceDecoder.h"
 
-#include <QDateTime>
 #include <QFile>
 #include <QMutexLocker>
 #include <exception>
@@ -24,15 +23,15 @@ TraceWorker::~TraceWorker() {
 
 void TraceWorker::stop() { stopSource_.request_stop(); }
 
-QStringList TraceWorker::takeLines() {
+QList<TraceRow> TraceWorker::takeRows() {
     QMutexLocker lock(&mutex_);
-    QStringList result;
+    QList<TraceRow> result;
     result.swap(pending_);
-    pendingChars_ = 0;
+    pendingBytes_ = 0;
     return result;
 }
 
-quint64 TraceWorker::droppedLines() {
+quint64 TraceWorker::droppedRows() {
     QMutexLocker lock(&mutex_);
     return dropped_;
 }
@@ -47,21 +46,14 @@ void TraceWorker::run() {
         TraceDecoder decoder([this, &flushing](const TraceEntry& entry) {
             if (entry.direction == Direction::Atr || (device_ != 0 && entry.device != device_))
                 return;
-            const auto bytes = QByteArray(reinterpret_cast<const char*>(entry.data.data()),
-                                          static_cast<qsizetype>(entry.data.size()));
-            const auto time = QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(entry.timestampUs / 1000))
-                                  .toString(QStringLiteral("HH:mm:ss.zzz"));
-            const auto line = QStringLiteral("[%1] bus %2 / device %3 / slot %4 / seq %5  %6  %7")
-                                  .arg(time).arg(entry.bus).arg(entry.device)
-                                  .arg(entry.slot).arg(entry.sequence)
-                                  .arg(entry.direction == Direction::Command ? QStringLiteral(">>") : QStringLiteral("<<"))
-                                  .arg(QString::fromLatin1(bytes.toHex(' ').toUpper()));
+            // Time and info text are prepared here, off the GUI thread.
+            auto row = makeTraceRow(entry);
             while (flushing || !stopSource_.stop_requested()) {
                 {
                     QMutexLocker lock(&mutex_);
-                    if (pending_.size() < 10000 && pendingChars_ + line.size() <= 4 * 1024 * 1024) {
-                        pending_.append(line);
-                        pendingChars_ += line.size();
+                    if (pending_.size() < 10000 && pendingBytes_ + row.data.size() <= 4 * 1024 * 1024) {
+                        pendingBytes_ += row.data.size();
+                        pending_.append(std::move(row));
                         return;
                     }
                     if (source_ == Source::Live || flushing) {

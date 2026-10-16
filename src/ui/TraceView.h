@@ -1,22 +1,44 @@
 #pragma once
 
-#include <QStringList>
-
-class QPlainTextEdit;
+#include <QTableView>
+#include "TraceModel.h"
 
 namespace apdu {
 
-struct TraceLimits {
-    int maxRows = 20000;
-    // Row limits alone allow gigabytes of long extended APDUs, so the
-    // document's UTF-16 text is bounded as well (8 Mi characters = 16 MiB).
-    int maxCharacters = 8 * 1024 * 1024;
-};
+// Table of decoded APDUs with a text filter. Copy (Ctrl+C) and the context
+// menu use the same line format as Save.
+class TraceView final : public QTableView {
+    Q_OBJECT
+public:
+    explicit TraceView(TraceLimits limits = {}, QWidget* parent = nullptr);
 
-// Appends rows to a no-wrap trace view and trims the oldest complete rows to
-// the limits. With follow, the view scrolls to the newest row. Otherwise the
-// first visible row stays in place while older rows are trimmed above it.
-void appendTraceRows(QPlainTextEdit& view, const QStringList& rows, bool follow,
-                     const TraceLimits& limits = {});
+    // Appends rows and trims the oldest ones to the limits. With follow, the
+    // view shows the newest row. Otherwise the row at the top of the view
+    // stays there while rows are added or trimmed above it.
+    void appendRows(QList<TraceRow> rows, bool follow);
+    void clearRows();
+    void setFilterText(const QString& text);
+    void setPlaceholderText(const QString& text);
+
+    TraceModel& traceModel() { return *model_; }
+    const TraceModel& traceModel() const { return *model_; }
+    int shownRowCount() const;
+    QString allText() const;   // Every row, oldest first.
+    QString shownText() const; // Rows that pass the filter.
+    QString selectedText() const;
+    QString selectedHex() const;
+
+protected:
+    void keyPressEvent(QKeyEvent* event) override;
+    void contextMenuEvent(QContextMenuEvent* event) override;
+    void paintEvent(QPaintEvent* event) override;
+
+private:
+    QList<int> selectedSourceRows() const;
+
+    TraceModel* model_;
+    TraceFilterModel* filter_;
+    QString placeholder_;
+};
 
 } // namespace apdu

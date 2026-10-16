@@ -7,12 +7,13 @@ class QCheckBox;
 class QCloseEvent;
 class QComboBox;
 class QLabel;
-class QPlainTextEdit;
+class QLineEdit;
 class QPushButton;
 class QSpinBox;
 class QTimer;
 
 namespace apdu {
+class TraceView;
 class TraceWorker;
 
 class MainWindow final : public QMainWindow {
@@ -21,7 +22,9 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
     void openCapture(const QString& path);
+    // All rows in the exported line format, oldest first.
     QString traceText() const;
+    const TraceView& traceView() const { return *trace_; }
 
 signals:
     void sessionFinished(bool success);
@@ -33,7 +36,8 @@ private:
     void refreshDevices();
     void startLive();
     void startWorker(TraceWorker* worker);
-    void drainLines();
+    void drainRows();
+    void updateShownCount();
     void setBusy(bool busy);
     void clearTrace();
     void saveTrace();
@@ -50,9 +54,11 @@ private:
     QPushButton* save_;
     QCheckBox* saveRaw_;
     QCheckBox* autoScroll_;
-    QPlainTextEdit* trace_;
+    QLineEdit* filter_;
+    TraceView* trace_;
     QLabel* status_;
     QLabel* count_;
+    QLabel* shown_;
     QTimer* poll_;
     TraceWorker* worker_ = nullptr;
     QString rawPath_;
