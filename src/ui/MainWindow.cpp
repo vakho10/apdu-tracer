@@ -24,6 +24,9 @@
 #include <exception>
 
 namespace apdu {
+namespace {
+constexpr int addressRole = Qt::UserRole + 1;
+}
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle(QStringLiteral("APDU Tracer — Native"));
@@ -32,9 +35,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* central = new QWidget(this);
     auto* layout = new QVBoxLayout(central);
     auto* captureBar = new QHBoxLayout;
-    captureBar->addWidget(new QLabel(QStringLiteral("USB controller:")));
+    captureBar->addWidget(new QLabel(QStringLiteral("Capture device:")));
     devices_ = new QComboBox;
     devices_->setMinimumWidth(170);
+    devices_->setToolTip(QStringLiteral(
+        "USBPcap captures a USB root hub. Pick the hub to capture every device on it, "
+        "or a device listed under it to capture only that USB address."));
     captureBar->addWidget(devices_, 1);
     refresh_ = new QPushButton(QStringLiteral("Refresh"));
     captureBar->addWidget(refresh_);
@@ -42,7 +48,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     address_ = new QSpinBox;
     address_->setRange(0, 127);
     address_->setSpecialValueText(QStringLiteral("All"));
-    address_->setToolTip(QStringLiteral("Optional device address filter within this USB controller."));
+    address_->setToolTip(QStringLiteral(
+        "USB address to capture on this root hub. During live capture the USBPcap driver "
+        "discards other devices' traffic. All also captures devices attached later."));
     captureBar->addWidget(address_);
     start_ = new QPushButton(QStringLiteral("Start capture"));
     stop_ = new QPushButton(QStringLiteral("Stop"));
@@ -71,6 +79,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         "Auto detects T=1 from protocol exchanges. Choose T=1 for a TPDU reader when capturing mid-session, "
         "or APDU to keep an APDU reader's bytes unchanged."));
     tools->addWidget(transport_);
+    tools->addWidget(new QLabel(QStringLiteral("Driver buffer:")));
+    buffer_ = new QComboBox;
+    for (const int mebibytes : {4, 8, 16, 32, 64, 128})
+        buffer_->addItem(QStringLiteral("%1 MiB").arg(mebibytes), static_cast<quint32>(mebibytes) * 1024 * 1024);
+    buffer_->setCurrentIndex(buffer_->findData(CaptureOptions::defaultBufferBytes));
+    buffer_->setToolTip(QStringLiteral(
+        "Kernel memory USBPcap reserves for live capture. The driver silently drops packets "
+        "when it fills; choose more for busy hubs or when capturing the whole root hub."));
+    tools->addWidget(buffer_);
     tools->addStretch();
     tools->addWidget(new QLabel(QStringLiteral(">> Sent     << Received")));
     autoScroll_ = new QCheckBox(QStringLiteral("Auto-scroll"));
@@ -84,7 +101,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     trace_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
     trace_->setMaximumBlockCount(20000);
     trace_->setPlaceholderText(QStringLiteral(
-        "Choose a USBPcap controller and start capture, or open a USBPcap .pcap file.\n\n"
+        "Choose your reader (or its USB root hub) and start capture, or open a USBPcap .pcap file.\n\n"
         "APDUs appear here as hexadecimal text.\n"
         "Supports APDU and T=1 USB CCID readers. ATRs and transport-control messages are omitted."));
     layout->addWidget(trace_, 1);
@@ -100,6 +117,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     poll_->setInterval(50);
     connect(poll_, &QTimer::timeout, this, &MainWindow::drainLines);
     connect(refresh_, &QPushButton::clicked, this, &MainWindow::refreshDevices);
+    connect(devices_, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (index >= 0) address_->setValue(devices_->itemData(index, addressRole).toInt());
+    });
     connect(start_, &QPushButton::clicked, this, &MainWindow::startLive);
     connect(stop_, &QPushButton::clicked, this, [this] {
         if (worker_) {
@@ -146,14 +166,24 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 QString MainWindow::traceText() const { return trace_->toPlainText(); }
 
 void MainWindow::refreshDevices() {
-    const auto previous = devices_->currentData().toString();
+    const auto previousPath = devices_->currentData().toString();
+    const auto previousAddress = devices_->currentData(addressRole).toInt();
+    const auto address = address_->value();
     devices_->clear();
     try {
-        for (const auto& device : UsbPcapBackend::devices())
-            devices_->addItem(QString::fromStdString(device.label), QString::fromStdString(device.path));
-        const int index = devices_->findData(previous);
-        if (index >= 0) devices_->setCurrentIndex(index);
-        status_->setText(devices_->count() ? QStringLiteral("Ready — select your reader's USB controller")
+        int previous = -1;
+        for (const auto& device : UsbPcapBackend::devices()) {
+            const auto path = QString::fromStdString(device.path);
+            if (path == previousPath && (previous < 0 || device.address == previousAddress))
+                previous = devices_->count();
+            devices_->addItem(QString::fromStdString(device.label), path);
+            devices_->setItemData(devices_->count() - 1, device.address, addressRole);
+        }
+        if (previous >= 0) devices_->setCurrentIndex(previous);
+        // Keep a manually chosen address when the same entry is still listed.
+        if (previous >= 0 && devices_->currentData(addressRole).toInt() == previousAddress)
+            address_->setValue(address);
+        status_->setText(devices_->count() ? QStringLiteral("Ready — select your reader")
             : QStringLiteral("No USBPcap devices found. Install USBPcap and reboot; offline replay is available."));
     } catch (const std::exception& error) {
         status_->setText(QString::fromUtf8(error.what()));
@@ -165,7 +195,7 @@ void MainWindow::startLive() {
     if (worker_ || devices_->currentIndex() < 0) return;
     startWorker(new TraceWorker(TraceWorker::Source::Live, devices_->currentData().toString(),
                                 address_->value(), this, static_cast<TransportMode>(transport_->currentData().toInt()),
-                                rawPath_));
+                                rawPath_, buffer_->currentData().toUInt()));
     sessionRawPath_ = rawPath_;
     // A path is used once, so a later capture never silently overwrites it.
     saveRaw_->setChecked(false);
@@ -248,6 +278,7 @@ void MainWindow::drainLines() {
 void MainWindow::setBusy(bool busy) {
     devices_->setEnabled(!busy);
     transport_->setEnabled(!busy);
+    buffer_->setEnabled(!busy);
     address_->setEnabled(!busy);
     refresh_->setEnabled(!busy);
     saveRaw_->setEnabled(!busy);

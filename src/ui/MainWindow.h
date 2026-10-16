@@ -40,6 +40,7 @@ private:
 
     QComboBox* devices_;
     QComboBox* transport_;
+    QComboBox* buffer_;
     QSpinBox* address_;
     QPushButton* refresh_;
     QPushButton* start_;

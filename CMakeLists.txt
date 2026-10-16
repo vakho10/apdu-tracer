@@ -23,6 +23,8 @@ add_library(apdu_capture src/capture/UsbPcapBackend.cpp)
 target_include_directories(apdu_capture PUBLIC src)
 if(WIN32)
     target_compile_definitions(apdu_capture PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0A00)
+    # SetupAPI and the configuration manager name the devices on each root hub.
+    target_link_libraries(apdu_capture PRIVATE setupapi cfgmgr32)
 endif()
 apdu_warnings(apdu_capture)
 
@@ -43,6 +45,7 @@ if(BUILD_TESTING)
         # This standalone harness replaces driver-facing Win32 calls; it never
         # opens a real capture device and includes the implementation itself.
         add_executable(usbpcap_backend_tests tests/UsbPcapBackendTests.cpp)
+        target_link_libraries(usbpcap_backend_tests PRIVATE setupapi cfgmgr32)
         apdu_warnings(usbpcap_backend_tests)
         add_test(NAME usbpcap_backend_tests COMMAND usbpcap_backend_tests)
         set_tests_properties(usbpcap_backend_tests PROPERTIES TIMEOUT 15)

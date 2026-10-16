@@ -13,9 +13,9 @@
 namespace apdu {
 
 TraceWorker::TraceWorker(Source source, QString path, int device, QObject* parent, TransportMode mode,
-                         QString rawCapturePath)
+                         QString rawCapturePath, quint32 driverBufferBytes)
     : QThread(parent), source_(source), path_(std::move(path)), device_(device), mode_(mode),
-      rawCapturePath_(std::move(rawCapturePath)) {}
+      rawCapturePath_(std::move(rawCapturePath)), driverBufferBytes_(driverBufferBytes) {}
 
 TraceWorker::~TraceWorker() {
     stop();
@@ -82,6 +82,9 @@ void TraceWorker::run() {
                     throw std::runtime_error(QStringLiteral("Could not create raw capture %1: %2")
                                                  .arg(rawCapturePath_, raw->errorString()).toStdString());
             }
+            CaptureOptions options;
+            options.address = device_;
+            options.bufferBytes = driverBufferBytes_;
             UsbPcapBackend::capture(path_.toStdString(), token,
                 [&decoder, &raw, &rawFailed](std::span<const uint8_t> bytes) {
                     // Save first so the raw bytes survive a decoder error. A
@@ -89,7 +92,10 @@ void TraceWorker::run() {
                     if (raw && !raw->write(bytes)) rawFailed();
                     decoder.feed(bytes);
                 },
-                [this] { emit ready(QStringLiteral("Capturing on %1").arg(path_)); });
+                [this] {
+                    emit ready(device_ ? QStringLiteral("Capturing USB address %1 on %2").arg(device_).arg(path_)
+                                       : QStringLiteral("Capturing on %1").arg(path_));
+                }, options);
         } else {
             QFile file(path_);
             if (!file.open(QIODevice::ReadOnly))

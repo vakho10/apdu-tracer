@@ -39,6 +39,8 @@ struct State {
     OVERLAPPED* pending = nullptr;
     bool cancelled = false;
     std::vector<DWORD> controls;
+    std::vector<unsigned char> filter;
+    std::uint32_t bufferBytes = 0;
     std::promise<void> readPending;
 };
 
@@ -87,11 +89,13 @@ BOOL control(HANDLE handle, DWORD code, LPVOID input, DWORD size,
         std::uint32_t configured = 0;
         std::memcpy(&configured, input, sizeof(configured));
         require(configured >= 65536, "Buffer and snapshot must hold extended APDUs");
+        if (code == bufferCode) {
+            state.bufferBytes = configured;
+        }
     } else if (code == startCode) {
         require(size == 17 && input, "Address filter must use its packed 17-byte ABI");
         const auto* filter = static_cast<const unsigned char*>(input);
-        require(std::all_of(filter, filter + 16, [](auto byte) { return byte == 0; }) &&
-                    filter[16] == 1, "Capture must enable the filterAll flag");
+        state.filter.assign(filter, filter + size);
     } else {
         require(code == stopCode && input == nullptr && size == 0,
                 "Unexpected driver IOCTL");
@@ -192,6 +196,21 @@ void expectFailure(const std::function<void()>& operation, const char* expected)
     fake::require(failed, "Expected error was not propagated");
 }
 
+// filterAll set and every address bit clear: the whole root hub.
+std::vector<unsigned char> allDevicesFilter()
+{
+    std::vector<unsigned char> filter(17, 0);
+    filter[16] = 1;
+    return filter;
+}
+
+std::vector<unsigned char> singleAddressFilter(unsigned byteIndex, unsigned char bit)
+{
+    std::vector<unsigned char> filter(17, 0);
+    filter[byteIndex] = bit;
+    return filter;
+}
+
 void checkCleanup()
 {
     fake::require(fake::state.opens == 1 && fake::state.closes == 1,
@@ -225,7 +244,71 @@ void cancellationTest()
                   "Driver stream must be forwarded without modification");
     fake::require(fake::state.cancels == 1 && fake::state.drains == 1,
                   "Stop must cancel and drain exactly one pending read");
+    fake::require(fake::state.filter == allDevicesFilter(),
+                  "Address All must send filterAll with an empty address bitmap");
+    fake::require(fake::state.bufferBytes == apdu::CaptureOptions::defaultBufferBytes,
+                  "Capture must request the default driver buffer");
     checkCleanup();
+}
+
+void addressFilterTest()
+{
+    // USBPCAP_ADDRESS_FILTER.addresses[address / 32] bit (address % 32),
+    // little-endian, with filterAll cleared so only that device is captured.
+    struct Case {
+        int address;
+        unsigned byteIndex;
+        unsigned char bit;
+    };
+    for (const auto [address, byteIndex, bit] : {Case{5, 0, 0x20}, Case{1, 0, 0x02},
+                                                 Case{37, 4, 0x20}, Case{127, 15, 0x80}}) {
+        fake::state = {};
+        apdu::CaptureOptions options;
+        options.address = address;
+        options.bufferBytes = 32 * 1024 * 1024;
+        unsigned chunks = 0;
+        expectFailure([&] {
+            apdu::UsbPcapBackend::capture(devicePath, {}, [&](auto) {
+                ++chunks;
+                throw std::runtime_error("filter checked");
+            }, {}, options);
+        }, "filter checked");
+        fake::require(chunks == 1, "A filtered capture must still stream bytes");
+        fake::require(fake::state.filter == singleAddressFilter(byteIndex, bit),
+                      "A specific address must send only its bit with filterAll cleared");
+        fake::require(fake::state.bufferBytes == options.bufferBytes,
+                      "Capture must request the configured driver buffer");
+        checkCleanup();
+    }
+
+    fake::state = {};
+    apdu::CaptureOptions all;
+    all.address = 0;
+    expectFailure([&] {
+        apdu::UsbPcapBackend::capture(devicePath, {}, [](auto) {
+            throw std::runtime_error("filter checked");
+        }, {}, all);
+    }, "filter checked");
+    fake::require(fake::state.filter == allDevicesFilter(),
+                  "Address 0 (All) must send filterAll");
+    checkCleanup();
+}
+
+void enumerationHelperTest()
+{
+    fake::require(apdu::hubDevicePath(L"\\??\\USB#ROOT_HUB30#4&1#{f18a0e88}") ==
+                      L"\\\\.\\USB#ROOT_HUB30#4&1#{f18a0e88}",
+                  "Kernel interface links must become Win32 device paths");
+    fake::require(apdu::hubDevicePath(L"USB#VID_05E3&PID_0610#5&2#{f18a0e88}") ==
+                      L"\\\\.\\USB#VID_05E3&PID_0610#5&2#{f18a0e88}",
+                  "Bare external hub names must become Win32 device paths");
+    fake::require(apdu::deviceLabel(L"USBPcap2", L"Smart card reader", 5) ==
+                      "USBPcap2 \xE2\x80\x93 Smart card reader (address 5)",
+                  "Attached devices must show their controller, name, and address");
+    fake::require(apdu::deviceLabel(L"USBPcap1", {}, 0) == "USBPcap1 \xE2\x80\x93 entire root hub",
+                  "Root hub entries must say they capture the whole hub");
+    fake::require(apdu::utf8(L"Lecteur é") == "Lecteur \xC3\xA9",
+                  "Device names must be converted to UTF-8");
 }
 
 void failureTests()
@@ -305,6 +388,17 @@ void preflightTest()
     apdu::UsbPcapBackend::capture(devicePath, source.get_token(), {}, {});
     expectFailure([] { apdu::UsbPcapBackend::capture("C:\\file", {}, [](auto) {}, {}); },
                   "Select a USBPcap controller");
+    apdu::CaptureOptions badAddress;
+    badAddress.address = 128;
+    expectFailure([&] { apdu::UsbPcapBackend::capture(devicePath, {}, [](auto) {}, {}, badAddress); },
+                  "addresses range");
+    for (const std::uint32_t bytes : {apdu::CaptureOptions::minBufferBytes - 1,
+                                      apdu::CaptureOptions::maxBufferBytes + 1}) {
+        apdu::CaptureOptions badBuffer;
+        badBuffer.bufferBytes = bytes;
+        expectFailure([&] { apdu::UsbPcapBackend::capture(devicePath, {}, [](auto) {}, {}, badBuffer); },
+                      "driver buffer");
+    }
     fake::require(fake::state.opens == 0, "Preflight failures must not open any device");
 }
 
@@ -316,6 +410,8 @@ int main()
         preflightTest();
         cancellationTest();
         completionTest();
+        addressFilterTest();
+        enumerationHelperTest();
         failureTests();
         std::cout << "USBPcap backend lifecycle tests passed (mock driver; real Win32 waits).\n";
         return 0;
