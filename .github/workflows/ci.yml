@@ -1,42 +1,39 @@
-name: CI
+name: C++ / Qt
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'codex/native-*']
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-
+  windows:
+    runs-on: windows-2022
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          version: '6.8.1'
+          arch: win64_msvc2022_64
+          cache: true
+      - name: Configure
+        run: cmake -S . -B build/windows -G "Visual Studio 17 2022" -A x64
+      - name: Build
+        run: cmake --build build/windows --config Release --parallel
+      - name: Test decoder and Qt replay
+        run: ctest --test-dir build/windows -C Release --output-on-failure
 
-      # The checks below don't launch Electron, so skip the ~100 MB binary
-      # download to keep CI fast and avoid mirror stalls.
-      - name: Install dependencies
-        run: npm ci
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Check formatting
-        run: npm run format:check
-
-      - name: Test
-        run: npm test
+  portable-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build/core -DAPDU_BUILD_GUI=OFF -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/core --parallel
+      - name: Test decoder
+        run: ctest --test-dir build/core --output-on-failure

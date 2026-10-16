@@ -1,7 +1,9 @@
-node_modules/
-out/
-dist/
-release/
+# CMake output, packaged binaries, and local SDKs
+/build/
+/build-*/
+/dist/
+/.deps/
+/CMakeUserPresets.json
 *.log
 .DS_Store
 

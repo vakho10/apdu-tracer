@@ -1,0 +1,338 @@
+#include "TraceDecoder.h"
+#include "CcidChannel.h"
+
+#include <algorithm>
+#include <map>
+#include <stdexcept>
+#include <tuple>
+#include <utility>
+
+namespace apdu {
+namespace {
+
+using Bytes = std::span<const std::uint8_t>;
+constexpr std::size_t maxPacketBytes = 16 * 1024 * 1024;
+constexpr std::size_t maxCcidPayload = 65544;
+constexpr std::size_t maxChannels = 256;
+constexpr std::size_t maxEndpointStreams = 256;
+
+std::uint16_t read16(Bytes b, std::size_t i, bool little = true) {
+    return little ? static_cast<std::uint16_t>(b[i] | (b[i + 1] << 8))
+                  : static_cast<std::uint16_t>((b[i] << 8) | b[i + 1]);
+}
+
+std::uint32_t read32(Bytes b, std::size_t i, bool little = true) {
+    std::uint32_t value = 0;
+    for (std::size_t n = 0; n != 4; ++n) {
+        value = (value << 8) | b[i + (little ? 3 - n : n)];
+    }
+    return value;
+}
+
+bool knownType(std::uint8_t type, bool incoming) {
+    if (incoming) {
+        return type >= 0x80 && type <= 0x84;
+    }
+    switch (type) {
+    case 0x61: case 0x62: case 0x63: case 0x65: case 0x69: case 0x6a:
+    case 0x6b: case 0x6c: case 0x6d: case 0x6e: case 0x6f:
+    case 0x71: case 0x72: case 0x73:
+        return true;
+    default:
+        return false;
+    }
+}
+
+using EndpointKey = std::tuple<std::uint16_t, std::uint16_t, std::uint8_t>;
+using SlotKey = std::tuple<std::uint16_t, std::uint16_t, std::uint8_t>;
+
+struct Assembly {
+    std::vector<std::uint8_t> bytes;
+    std::uint64_t timestampUs{};
+};
+
+struct Slot {
+    explicit Slot(TransportMode mode) : channel(mode) {}
+    CcidChannel channel;
+    std::uint64_t lastUse{};
+    bool emitted{}; // Has produced an entry, so it is likely a real reader slot.
+};
+
+} // namespace
+
+struct TraceDecoder::Impl {
+    enum class Stage { GlobalHeader, RecordHeader, Packet };
+
+    EntryHandler handler;
+    Stage stage{Stage::GlobalHeader};
+    std::vector<std::uint8_t> buffer;
+    std::size_t needed{24};
+    bool little{true};
+    bool nanoseconds{false};
+    bool finished{false};
+    bool truncated{false};
+    std::uint32_t snaplen{};
+    std::uint64_t timestampUs{};
+    std::map<EndpointKey, Assembly> streams;
+    TransportMode mode;
+    std::map<SlotKey, Slot> channels;
+    std::uint64_t useCounter{};
+
+    Impl(EntryHandler h, TransportMode transport) : handler(std::move(h)), mode(transport) {
+        if (!handler) {
+            throw std::invalid_argument("A trace entry handler is required.");
+        }
+    }
+
+    void invalidateDevice(std::uint16_t bus, std::uint16_t device) {
+        const auto sameDevice = [=](const auto& item) {
+            return std::get<0>(item.first) == bus && std::get<1>(item.first) == device;
+        };
+        for (auto& item : channels)
+            if (sameDevice(item))
+                for (const auto& entry : item.second.channel.transportGap()) handler(entry);
+        std::erase_if(streams, sameDevice);
+    }
+
+    // Bulk traffic of non-CCID devices on the same root hub can resemble CCID
+    // headers. Limits therefore evict state instead of failing the capture.
+    void evictChannel() {
+        auto victim = channels.end();
+        for (auto it = channels.begin(); it != channels.end(); ++it) {
+            if (victim == channels.end() ||
+                std::pair(it->second.emitted, it->second.lastUse) <
+                    std::pair(victim->second.emitted, victim->second.lastUse))
+                victim = it;
+        }
+        for (const auto& entry : victim->second.channel.finish()) handler(entry);
+        channels.erase(victim);
+    }
+
+    void evictStream() {
+        const auto oldest = std::min_element(streams.begin(), streams.end(),
+            [](const auto& left, const auto& right) {
+                return left.second.timestampUs < right.second.timestampUs;
+            });
+        // Its partial message is lost, which is a gap for that device.
+        invalidateDevice(std::get<0>(oldest->first), std::get<1>(oldest->first));
+    }
+
+    void globalHeader(Bytes b) {
+        // Inspect raw magic before interpreting file-endian fields.
+        const auto magic = read32(b, 0);
+        switch (magic) {
+        case 0xa1b2c3d4: little = true; nanoseconds = false; break;
+        case 0xd4c3b2a1: little = false; nanoseconds = false; break;
+        case 0xa1b23c4d: little = true; nanoseconds = true; break;
+        case 0x4d3cb2a1: little = false; nanoseconds = true; break;
+        case 0x0a0d0d0a:
+            throw std::runtime_error("PCAPNG is not supported. Export as classic PCAP with USBPcap link type 249.");
+        default:
+            throw std::runtime_error("Not a supported classic PCAP capture (invalid magic).");
+        }
+        if (read16(b, 4, little) != 2 || read16(b, 6, little) != 4) {
+            throw std::runtime_error("Only classic PCAP version 2.4 is supported.");
+        }
+        snaplen = read32(b, 16, little);
+        if (snaplen == 0 || snaplen > maxPacketBytes) {
+            throw std::runtime_error("PCAP snapshot length must be between 1 byte and 16 MiB.");
+        }
+        if (read32(b, 20, little) != 249) {
+            throw std::runtime_error("This capture does not use USBPcap link type 249.");
+        }
+        stage = Stage::RecordHeader;
+        needed = 16;
+    }
+
+    void recordHeader(Bytes b) {
+        const auto seconds = read32(b, 0, little);
+        const auto fraction = read32(b, 4, little);
+        const auto captured = read32(b, 8, little);
+        const auto original = read32(b, 12, little);
+        if (fraction >= (nanoseconds ? 1000000000u : 1000000u)) {
+            throw std::runtime_error("PCAP record has an invalid timestamp fraction.");
+        }
+        if (captured > snaplen || captured > maxPacketBytes || captured > original) {
+            throw std::runtime_error("PCAP record length is invalid or exceeds the snapshot limit.");
+        }
+        // A snapshot-truncated record is legal PCAP. With a root-hub capture it
+        // usually belongs to unrelated bulk traffic, e.g. a USB storage device.
+        truncated = captured < original;
+        if (!truncated && captured < 27) {
+            throw std::runtime_error("PCAP packet is shorter than the USBPcap header.");
+        }
+        timestampUs = static_cast<std::uint64_t>(seconds) * 1000000 +
+                      (nanoseconds ? fraction / 1000 : fraction);
+        if (captured == 0) {
+            return; // Fully truncated: no packet bytes follow this header.
+        }
+        stage = Stage::Packet;
+        needed = captured;
+    }
+
+    void ccidMessage(Bytes message, const EndpointKey& key, std::uint64_t time) {
+        const SlotKey slot{std::get<0>(key), std::get<1>(key), message[5]};
+        auto found = channels.find(slot);
+        if (found == channels.end()) {
+            if (channels.size() >= maxChannels) evictChannel();
+            found = channels.try_emplace(slot, mode).first;
+        }
+        found->second.lastUse = ++useCounter;
+        TraceEntry metadata;
+        metadata.timestampUs = time;
+        metadata.bus = std::get<0>(key);
+        metadata.device = std::get<1>(key);
+        metadata.endpoint = std::get<2>(key);
+        for (const auto& entry : found->second.channel.feed(message, metadata)) {
+            found->second.emitted = true;
+            handler(entry);
+        }
+    }
+
+    void bulkPayload(Bytes payload, const EndpointKey& key) {
+        if (payload.empty()) {
+            return;
+        }
+        const bool incoming = (std::get<2>(key) & 0x80) != 0;
+        if (!streams.contains(key)) {
+            if (!knownType(payload[0], incoming)) {
+                return; // Do not search arbitrary bulk bytes for embedded CCID headers.
+            }
+            while (streams.size() >= maxEndpointStreams) evictStream();
+            streams.emplace(key, Assembly{});
+        }
+        auto& assembly = streams.at(key);
+        while (!payload.empty()) {
+            if (assembly.bytes.empty()) {
+                if (!knownType(payload[0], incoming)) {
+                    streams.erase(key);
+                    return;
+                }
+                assembly.timestampUs = timestampUs;
+            }
+            std::size_t target = 10;
+            if (assembly.bytes.size() >= 10) {
+                target += read32(assembly.bytes, 1);
+            }
+            const auto take = std::min(payload.size(), target - assembly.bytes.size());
+            assembly.bytes.insert(assembly.bytes.end(), payload.begin(), payload.begin() + take);
+            payload = payload.subspan(take);
+            if (assembly.bytes.size() < 10) {
+                break;
+            }
+            const auto bodySize = read32(assembly.bytes, 1);
+            if (bodySize > maxCcidPayload) {
+                // This may be unrelated bulk traffic that coincidentally started
+                // with a CCID opcode. Drop state instead of allocating its length.
+                invalidateDevice(std::get<0>(key), std::get<1>(key));
+                return;
+            }
+            if (assembly.bytes.size() == 10 + bodySize) {
+                ccidMessage(assembly.bytes, key, assembly.timestampUs);
+                assembly.bytes.clear();
+            }
+        }
+        if (assembly.bytes.empty()) {
+            streams.erase(key);
+        }
+    }
+
+    void truncatedPacket(Bytes b) {
+        // Without the full payload, nothing of this transfer can be decoded.
+        // A truncated bulk transfer is a data gap for its device only.
+        if (b.size() >= 23 && b[22] == 3) {
+            invalidateDevice(read16(b, 17), read16(b, 19));
+        }
+    }
+
+    void packet(Bytes b) {
+        if (truncated) {
+            truncatedPacket(b);
+            return;
+        }
+        // USBPcap fields remain little-endian even in a big-endian PCAP file.
+        const auto headerLength = read16(b, 0);
+        const auto dataLength = read32(b, 23);
+        if (headerLength < 27 || headerLength > b.size() ||
+            dataLength != b.size() - headerLength) {
+            throw std::runtime_error("USBPcap header or payload length is invalid or truncated.");
+        }
+        if (b[22] != 3 || (b[21] & 0x0f) == 0 || (b[21] & 0x70) != 0 || (b[16] & 0xfe) != 0) {
+            return; // Only bulk transfers on a valid non-control endpoint.
+        }
+        const auto bus = read16(b, 17);
+        const auto device = read16(b, 19);
+        const bool completion = (b[16] & 1) != 0;
+        const bool incoming = (b[21] & 0x80) != 0;
+        if (completion && read32(b, 10) != 0) {
+            // A failed transfer creates a gap; never join fragments across it.
+            invalidateDevice(bus, device);
+            return;
+        }
+        if (incoming != completion) {
+            return; // OUT submission / IN completion only: no double counting IRPs.
+        }
+        bulkPayload(b.subspan(headerLength, dataLength), {bus, device, b[21]});
+    }
+
+    void feed(Bytes bytes) {
+        if (finished) {
+            throw std::logic_error("Cannot feed a finished trace decoder.");
+        }
+        while (!bytes.empty()) {
+            const auto take = std::min(bytes.size(), needed - buffer.size());
+            buffer.insert(buffer.end(), bytes.begin(), bytes.begin() + take);
+            bytes = bytes.subspan(take);
+            // PCAPNG's magic is enough to provide a useful diagnostic even for
+            // captures shorter than the classic global header.
+            if (stage == Stage::GlobalHeader && buffer.size() >= 4 &&
+                read32(buffer, 0) == 0x0a0d0d0a) {
+                throw std::runtime_error("PCAPNG is not supported. Export as classic PCAP with USBPcap link type 249.");
+            }
+            if (buffer.size() != needed) {
+                continue;
+            }
+            switch (stage) {
+            case Stage::GlobalHeader: globalHeader(buffer); break;
+            case Stage::RecordHeader: recordHeader(buffer); break;
+            case Stage::Packet:
+                packet(buffer);
+                stage = Stage::RecordHeader;
+                needed = 16;
+                break;
+            }
+            buffer.clear();
+        }
+    }
+};
+
+TraceDecoder::TraceDecoder(EntryHandler handler, TransportMode mode)
+    : impl_(std::make_unique<Impl>(std::move(handler), mode)) {}
+TraceDecoder::~TraceDecoder() = default;
+
+void TraceDecoder::feed(std::span<const std::uint8_t> bytes) {
+    impl_->feed(bytes);
+}
+
+void TraceDecoder::finish() {
+    if (impl_->finished) {
+        return;
+    }
+    if (impl_->stage != Impl::Stage::RecordHeader || !impl_->buffer.empty()) {
+        impl_->finished = true;
+        throw std::runtime_error("Capture ended inside a PCAP header or packet (truncated stream).");
+    }
+    cancel();
+}
+
+void TraceDecoder::cancel() {
+    if (impl_->finished) return;
+    impl_->finished = true;
+    impl_->buffer.clear();
+    impl_->streams.clear();
+    for (auto& [key, slot] : impl_->channels)
+        for (const auto& entry : slot.channel.finish()) impl_->handler(entry);
+    impl_->channels.clear();
+}
+
+} // namespace apdu
