@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(APDUTracerNative VERSION 0.1.0 LANGUAGES CXX)
+project(APDUTracerNative VERSION 2.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -64,6 +64,8 @@ if(APDU_BUILD_GUI)
     apdu_warnings(apdu_ui)
     qt_add_executable(APDUTracer WIN32 src/main.cpp)
     target_link_libraries(APDUTracer PRIVATE apdu_ui)
+    # project() VERSION is the single source of the application version.
+    target_compile_definitions(APDUTracer PRIVATE APDU_TRACER_VERSION="${PROJECT_VERSION}")
     apdu_warnings(APDUTracer)
 
     if(BUILD_TESTING)
