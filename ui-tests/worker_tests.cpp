@@ -1,13 +1,19 @@
+#include "core/TraceDecoder.h"
 #include "ui/MainWindow.h"
+#include "ui/RawCaptureWriter.h"
 #include "ui/TraceWorker.h"
 
 #include <QApplication>
 #include <QEventLoop>
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
+#include <vector>
 
 namespace {
 void require(bool condition, const char* message) {
@@ -129,6 +135,103 @@ void cancellationFlushesProbe(const QString& path) {
             "Stop did not preserve the unresolved probe as its original raw APDU");
 }
 
+// One USBPcap bulk record carrying one CCID message, as a live stream sees it.
+void appendRecord(QByteArray& stream, quint32 time, bool in, const QByteArray& ccid) {
+    QByteArray packet;
+    append16(packet, 27);
+    packet.append(QByteArray(8, '\0')); // IRP
+    append32(packet, 0);
+    append16(packet, 9);
+    packet.append(in ? '\x01' : '\0');
+    append16(packet, 1);
+    append16(packet, 5);
+    packet.append(in ? '\x82' : '\x01');
+    packet.append('\x03');
+    append32(packet, static_cast<quint32>(ccid.size()));
+    packet.append(ccid);
+    append32(stream, time);
+    append32(stream, 0);
+    append32(stream, static_cast<quint32>(packet.size()));
+    append32(stream, static_cast<quint32>(packet.size()));
+    stream.append(packet);
+}
+
+QByteArray ccidMessage(char type, quint8 sequence, const QByteArray& payload) {
+    QByteArray message;
+    message.append(type);
+    append32(message, static_cast<quint32>(payload.size()));
+    message.append('\0'); // slot
+    message.append(static_cast<char>(sequence));
+    message.append(QByteArray(3, '\0'));
+    message.append(payload);
+    return message;
+}
+
+std::vector<apdu::TraceEntry> decode(const QByteArray& bytes, bool cancel) {
+    std::vector<apdu::TraceEntry> entries;
+    apdu::TraceDecoder decoder([&](const apdu::TraceEntry& entry) { entries.push_back(entry); });
+    decoder.feed(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(bytes.constData()),
+                                          static_cast<size_t>(bytes.size())));
+    if (cancel) decoder.cancel(); else decoder.finish();
+    return entries;
+}
+
+// Live chunks are arbitrary stream slices; Stop can cut the last record. The
+// saved file must end on a record boundary and replay to the same entries.
+void rawCaptureReplays(const QString& path) {
+    QByteArray stream;
+    append32(stream, 0xa1b2c3d4);
+    append16(stream, 2);
+    append16(stream, 4);
+    append32(stream, 0);
+    append32(stream, 0);
+    append32(stream, 65535);
+    append32(stream, 249);
+    constexpr int exchanges = 40;
+    for (int i = 0; i < exchanges; ++i) {
+        const auto sequence = static_cast<quint8>(i);
+        appendRecord(stream, 100 + i, false, ccidMessage('\x6f', sequence,
+            QByteArray::fromHex("00A4040007A0000000030000") + QByteArray(1, static_cast<char>(i))));
+        appendRecord(stream, 100 + i, true, ccidMessage('\x80', sequence,
+            QByteArray(i % 7, static_cast<char>(i)) + QByteArray::fromHex("9000")));
+    }
+    const auto complete = stream.size();
+    QByteArray cut;
+    appendRecord(cut, 999, false, ccidMessage('\x6f', 99, QByteArray::fromHex("00B0000010")));
+    stream.append(cut.left(cut.size() / 2));
+
+    apdu::RawCaptureWriter writer(path);
+    require(writer.open(), "Could not open raw capture output");
+    const int sizes[] = {1, 3, 24, 7, 16, 100, 2, 513};
+    qsizetype offset = 0;
+    for (int i = 0; offset < stream.size(); ++i) {
+        const auto size = std::min<qsizetype>(sizes[i % std::size(sizes)], stream.size() - offset);
+        require(writer.write(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(stream.constData() + offset),
+                                                      static_cast<size_t>(size))), "Raw capture write failed");
+        offset += size;
+    }
+    require(writer.finish() && !writer.failed(), "Raw capture finish failed");
+
+    QFile saved(path);
+    require(saved.open(QIODevice::ReadOnly), "Could not reopen raw capture");
+    const auto bytes = saved.readAll();
+    require(bytes == stream.left(complete), "Raw capture was not trimmed to the last complete record");
+    // finish() would throw if the file still ended mid-record.
+    const auto replayed = decode(bytes, false);
+    const auto live = decode(stream, true);
+    require(replayed.size() == 2 * exchanges, "Raw capture replay lost entries");
+    const auto same = [](const apdu::TraceEntry& a, const apdu::TraceEntry& b) {
+        return a.timestampUs == b.timestampUs && a.bus == b.bus && a.device == b.device && a.slot == b.slot
+            && a.sequence == b.sequence && a.direction == b.direction && a.data == b.data;
+    };
+    require(std::equal(replayed.begin(), replayed.end(), live.begin(), live.end(), same),
+            "Raw capture replay differs from the live decode");
+
+    apdu::RawCaptureWriter missing(QFileInfo(path).dir().filePath(QStringLiteral("missing/raw.pcap")));
+    require(!missing.open() && missing.failed() && !missing.errorString().isEmpty(),
+            "Opening an unwritable raw capture path did not report an error");
+}
+
 void boundedWindow(const QString& path) {
     apdu::MainWindow window;
     QEventLoop loop;
@@ -160,8 +263,9 @@ int main(int argc, char* argv[]) {
         losslessReplay(small);
         cancellationWithFullQueue(large);
         cancellationFlushesProbe(probe);
+        rawCaptureReplays(directory.filePath(QStringLiteral("raw.pcap")));
         boundedWindow(large);
-        std::cout << "Lossless replay, bounded text, cancellation, and pending probe flush passed\n";
+        std::cout << "Lossless replay, bounded text, cancellation, pending probe flush, and raw capture replay passed\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

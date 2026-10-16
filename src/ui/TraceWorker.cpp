@@ -1,4 +1,5 @@
 #include "TraceWorker.h"
+#include "RawCaptureWriter.h"
 #include "capture/UsbPcapBackend.h"
 #include "core/TraceDecoder.h"
 
@@ -6,12 +7,15 @@
 #include <QFile>
 #include <QMutexLocker>
 #include <exception>
+#include <optional>
 #include <stdexcept>
 
 namespace apdu {
 
-TraceWorker::TraceWorker(Source source, QString path, int device, QObject* parent, TransportMode mode)
-    : QThread(parent), source_(source), path_(std::move(path)), device_(device), mode_(mode) {}
+TraceWorker::TraceWorker(Source source, QString path, int device, QObject* parent, TransportMode mode,
+                         QString rawCapturePath)
+    : QThread(parent), source_(source), path_(std::move(path)), device_(device), mode_(mode),
+      rawCapturePath_(std::move(rawCapturePath)) {}
 
 TraceWorker::~TraceWorker() {
     stop();
@@ -34,6 +38,10 @@ quint64 TraceWorker::droppedLines() {
 }
 
 void TraceWorker::run() {
+    std::optional<RawCaptureWriter> raw;
+    const auto rawFailed = [this, &raw] {
+        emit failed(QStringLiteral("Could not save raw capture %1: %2").arg(raw->path(), raw->errorString()));
+    };
     try {
         bool flushing = false;
         TraceDecoder decoder([this, &flushing](const TraceEntry& entry) {
@@ -68,8 +76,19 @@ void TraceWorker::run() {
         }, mode_);
         const auto token = stopSource_.get_token();
         if (source_ == Source::Live) {
+            if (!rawCapturePath_.isEmpty()) {
+                raw.emplace(rawCapturePath_);
+                if (!raw->open())
+                    throw std::runtime_error(QStringLiteral("Could not create raw capture %1: %2")
+                                                 .arg(rawCapturePath_, raw->errorString()).toStdString());
+            }
             UsbPcapBackend::capture(path_.toStdString(), token,
-                [&decoder](std::span<const uint8_t> bytes) { decoder.feed(bytes); },
+                [&decoder, &raw, &rawFailed](std::span<const uint8_t> bytes) {
+                    // Save first so the raw bytes survive a decoder error. A
+                    // failed save is reported once; capture continues.
+                    if (raw && !raw->write(bytes)) rawFailed();
+                    decoder.feed(bytes);
+                },
                 [this] { emit ready(QStringLiteral("Capturing on %1").arg(path_)); });
         } else {
             QFile file(path_);
@@ -104,6 +123,8 @@ void TraceWorker::run() {
     } catch (const std::exception& error) {
         emit failed(QString::fromUtf8(error.what()));
     }
+    // Trim a record cut by Stop or an error so the file replays cleanly.
+    if (raw && !raw->failed() && !raw->finish()) rawFailed();
 }
 
 } // namespace apdu

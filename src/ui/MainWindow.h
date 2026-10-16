@@ -47,12 +47,15 @@ private:
     QPushButton* open_;
     QPushButton* clear_;
     QPushButton* save_;
+    QCheckBox* saveRaw_;
     QCheckBox* autoScroll_;
     QPlainTextEdit* trace_;
     QLabel* status_;
     QLabel* count_;
     QTimer* poll_;
     TraceWorker* worker_ = nullptr;
+    QString rawPath_;
+    QString sessionRawPath_;
     quint64 total_ = 0;
     bool failed_ = false;
 };

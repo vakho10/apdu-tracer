@@ -54,8 +54,15 @@ redistributed runtime; this prototype does not produce a release installer.
 3. Leave **Reader transport** on **Auto**. Choose **T=1** for a TPDU reader when
    starting mid-session, or **APDU** to force ordinary APDU-level interpretation.
    This setting also applies to offline replay; Auto detects each card slot separately.
-4. Click **Start capture**, then use your existing smart-card application.
-5. Click **Stop** before **Save text**. Selected text can also be copied normally.
+4. Optionally tick **Save raw capture…** and choose a `.pcap` file. The next live
+   capture also writes the unmodified USBPcap stream there, so the session can be
+   reopened later with **Open PCAP** in another transport mode or examined in
+   Wireshark. Each chosen file is used for one capture, so a later capture never
+   overwrites it; tick the box again to save the next one. On Stop, a USB record cut
+   in half is trimmed so the file ends on a complete record. The raw file keeps all
+   traffic on the controller, regardless of the USB address filter.
+5. Click **Start capture**, then use your existing smart-card application.
+6. Click **Stop** before **Save text**. Selected text can also be copied normally.
 
 ```text
 [12:34:56.001] bus 1 / device 5 / slot 0 / seq 7  >>  00 A4 04 00 00
@@ -136,6 +143,9 @@ On Windows a backend harness substitutes the driver-facing Win32 calls to test
 configuration, streaming, idle-read cancellation, and cleanup on errors.
 Worker tests also exercise lossless replay of a record containing 12,000 commands,
 cancellation under backpressure, and bounded display memory for long APDUs.
+They also write a stream in irregular chunks through the raw capture writer,
+cut its last record in half, and check that the saved file is trimmed and replays
+to the same APDUs.
 
 For a manual hardware check, select your reader's controller, start capture,
 send a known SELECT using your card application, and confirm its command bytes
@@ -151,7 +161,7 @@ live check; automated tests use synthetic captures.
 CMakeLists.txt  Application, libraries, tests, and runtime deployment
 src/capture/   Direct Win32 USBPcap driver access and a portable stub
 src/core/      Incremental PCAP, USBPcap, and CCID decoding (standard C++ only)
-src/ui/        Qt worker, bounded text queue, and main window
+src/ui/        Qt worker, bounded text queue, raw .pcap writer, and main window
 tests/         Synthetic protocol regression tests and fixture generation
 ui-tests/      Qt asynchronous replay and worker tests
 ```

@@ -53,6 +53,7 @@ if(APDU_BUILD_GUI)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets)
     qt_standard_project_setup()
     add_library(apdu_ui
+        src/ui/RawCaptureWriter.cpp src/ui/RawCaptureWriter.h
         src/ui/TraceWorker.cpp src/ui/TraceWorker.h
         src/ui/MainWindow.cpp src/ui/MainWindow.h
     )

@@ -46,6 +46,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     captureBar->addWidget(address_);
     start_ = new QPushButton(QStringLiteral("Start capture"));
     stop_ = new QPushButton(QStringLiteral("Stop"));
+    saveRaw_ = new QCheckBox(QStringLiteral("Save raw capture…"));
+    saveRaw_->setToolTip(QStringLiteral(
+        "Also write the unmodified USBPcap stream to a .pcap file, to decode it again later "
+        "in another transport mode or open it in Wireshark."));
+    captureBar->addWidget(saveRaw_);
     captureBar->addWidget(start_);
     captureBar->addWidget(stop_);
     layout->addLayout(captureBar);
@@ -108,6 +113,21 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             {}, QStringLiteral("Classic PCAP (*.pcap *.cap);;All files (*)"));
         if (!path.isEmpty()) openCapture(path);
     });
+    connect(saveRaw_, &QCheckBox::toggled, this, [this](bool checked) {
+        if (!checked) {
+            rawPath_.clear();
+            saveRaw_->setToolTip({});
+            return;
+        }
+        const auto path = QFileDialog::getSaveFileName(this, QStringLiteral("Save raw USBPcap capture"),
+            QStringLiteral("apdu-capture.pcap"), QStringLiteral("Classic PCAP (*.pcap)"));
+        if (path.isEmpty()) {
+            saveRaw_->setChecked(false);
+            return;
+        }
+        rawPath_ = path;
+        saveRaw_->setToolTip(QStringLiteral("The next live capture is saved to %1").arg(path));
+    });
     connect(clear_, &QPushButton::clicked, this, &MainWindow::clearTrace);
     connect(save_, &QPushButton::clicked, this, &MainWindow::saveTrace);
     refreshDevices();
@@ -144,7 +164,11 @@ void MainWindow::refreshDevices() {
 void MainWindow::startLive() {
     if (worker_ || devices_->currentIndex() < 0) return;
     startWorker(new TraceWorker(TraceWorker::Source::Live, devices_->currentData().toString(),
-                                address_->value(), this, static_cast<TransportMode>(transport_->currentData().toInt())));
+                                address_->value(), this, static_cast<TransportMode>(transport_->currentData().toInt()),
+                                rawPath_));
+    sessionRawPath_ = rawPath_;
+    // A path is used once, so a later capture never silently overwrites it.
+    saveRaw_->setChecked(false);
 }
 
 void MainWindow::openCapture(const QString& path) {
@@ -155,6 +179,7 @@ void MainWindow::openCapture(const QString& path) {
 
 void MainWindow::startWorker(TraceWorker* worker) {
     clearTrace();
+    sessionRawPath_.clear();
     worker_ = worker;
     failed_ = false;
     setBusy(true);
@@ -174,9 +199,13 @@ void MainWindow::startWorker(TraceWorker* worker) {
         worker_ = nullptr;
         worker->deleteLater();
         setBusy(false);
-        if (!failed_)
-            status_->setText(dropped ? QStringLiteral("Capture ended — %1 APDUs dropped while display was busy").arg(dropped)
-                                    : QStringLiteral("Session ended — %1 APDUs").arg(total_));
+        if (!failed_) {
+            auto message = dropped ? QStringLiteral("Capture ended — %1 APDUs dropped while display was busy").arg(dropped)
+                                   : QStringLiteral("Session ended — %1 APDUs").arg(total_);
+            if (!sessionRawPath_.isEmpty())
+                message += QStringLiteral("; raw capture saved to %1").arg(sessionRawPath_);
+            status_->setText(message);
+        }
         emit sessionFinished(!failed_);
     });
     poll_->start();
@@ -221,6 +250,7 @@ void MainWindow::setBusy(bool busy) {
     transport_->setEnabled(!busy);
     address_->setEnabled(!busy);
     refresh_->setEnabled(!busy);
+    saveRaw_->setEnabled(!busy);
     start_->setEnabled(!busy && devices_->count() > 0);
     stop_->setEnabled(busy);
     open_->setEnabled(!busy);
