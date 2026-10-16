@@ -80,8 +80,24 @@ validation performed. Update the README when supported capture formats, usage,
 or limitations change. Use concise, descriptive commit messages.
 
 The CMake install target deploys the application and Qt runtime into a local
-folder on Windows. A release installer and automated publishing workflow are
-not currently provided.
+folder on Windows.
+
+## Releases
+
+1. Set the new version in `project(... VERSION x.y.z ...)` in `CMakeLists.txt`
+   (the only place it is defined) and merge that change to `main`.
+2. Tag the merge commit and push the tag:
+
+   ```bash
+   git tag -a vX.Y.Z -m "APDU Tracer vX.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+The Release workflow builds and tests on Windows, packages
+`APDUTracer-X.Y.Z-win64.zip` with its SHA-256 checksum, and publishes a GitHub
+release with notes generated from the merged pull requests. It fails if the tag
+does not match the CMake version. Running it manually builds the package as a
+workflow artifact without publishing.
 
 ## License
 
