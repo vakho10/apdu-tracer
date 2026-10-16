@@ -549,6 +549,64 @@ void t1TransportGapsQuarantineCommandTails() {
     }
 }
 
+void securePinEntryPreservesT1() {
+    // A PIN pad reader sends VERIFY as its own T=1 I-block, so both N(S)
+    // values advance without a visible XfrBlock. The next exchange must decode
+    // in explicit and inferred T=1 mode, and PIN entry must not be an APDU.
+    for (const auto mode : {apdu::TransportMode::T1, apdu::TransportMode::Auto}) {
+        for (const bool cancelled : {false, true}) {
+            Capture capture;
+            negotiate(capture);
+            capture.command(t1(0, command), 2);
+            capture.response(t1(0, success), 2);
+            capture.add(false, 0x69, {0, 0x82, 0, 0, 0x47, 4, 0x0f}, 3, 0, 0, 0); // PC_to_RDR_Secure
+            capture.response({}, 3, 0, {}, 0x80, 1); // Time extensions while the user types.
+            capture.response({}, 3, 0, {}, 0x80, 1);
+            if (cancelled) capture.response({}, 3, 0, {}, 0x40, 0xef); // PIN cancelled
+            else capture.response(t1(0x40, success), 3);
+            capture.command(t1(0, command), 4);
+            capture.response(t1(0, success), 4);
+            const auto entries = decode(capture, mode);
+            require(entries.size() == 4, "PIN pad Secure exchange dropped the following T=1 APDU exchange.");
+            entryIs(entries[2], Direction::Command, command, 4);
+            entryIs(entries[3], Direction::Response, success, 4);
+        }
+    }
+}
+
+void sideCommandsPreserveTransport() {
+    // This I-block is also a raw-valid APDU, so Auto can only decode it as
+    // T=1 when the mode inferred before the Escape/T0APDU/IccClock survives.
+    const Data inner{0, 4, 0, 0, 0};
+    const Data types{0x6b, 0x6a, 0x6e}, replies{0x83, 0x81, 0x81};
+    for (std::size_t i = 0; i < types.size(); ++i) {
+        const auto type = types[i], reply = replies[i];
+        Capture capture;
+        negotiate(capture);
+        capture.add(false, type, type == 0x6b ? Data{0x01, 0x02} : Data{}, 2, 0, 0, 0);
+        capture.add(true, reply, type == 0x6b ? Data{0x90, 0x00} : Data{}, 2, 0, 0, 0);
+        capture.command(t1(0, inner), 3);
+        capture.response(t1(0, success), 3);
+        const auto entries = decode(capture);
+        require(entries.size() == 2, "A side command reset the transport or its reply became an APDU.");
+        entryIs(entries[0], Direction::Command, inner, 3);
+        entryIs(entries[1], Direction::Response, success, 3);
+    }
+
+    // An Escape between CCID command chain fragments keeps the chain intact.
+    Capture chain;
+    const Data complete{0, 0xda, 0, 0, 2, 0x11, 0x22};
+    chain.command(part(complete, 0, 3), 10, 1);
+    chain.response({}, 10, 0x10);
+    chain.add(false, 0x6b, {0x01}, 11, 0, 0, 0);
+    chain.add(true, 0x83, {}, 11, 0, 0, 0);
+    chain.command(part(complete, 3, complete.size()), 12, 2);
+    chain.response(success, 12);
+    const auto entries = decode(chain);
+    require(entries.size() == 2, "An Escape command discarded an unfinished CCID command chain.");
+    entryIs(entries[0], Direction::Command, complete, 10);
+}
+
 } // namespace
 
 int main() {
@@ -566,7 +624,9 @@ int main() {
         {"Read-only CCID polls preserve transport and partial chains", readOnlyPollsPreserveTransport},
         {"Failed, replaced and unfinished probes preserve raw commands", unresolvedProbePreservesCommand},
         {"Cancellation flushes complete probes and discards partial transport data", cancellationFlushesOnlyCompleteCommands},
-        {"Transport gaps quarantine T=1 command tails and recover at exchange boundaries", t1TransportGapsQuarantineCommandTails}
+        {"Transport gaps quarantine T=1 command tails and recover at exchange boundaries", t1TransportGapsQuarantineCommandTails},
+        {"Secure PIN entry preserves T=1 decoding of the next exchange", securePinEntryPreservesT1},
+        {"Escape, T0APDU and IccClock preserve inferred transport and chains", sideCommandsPreserveTransport}
     };
     int failures = 0;
     for (const auto& [name, test] : tests) {

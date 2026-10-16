@@ -10,6 +10,9 @@ bulk IN completions provide CCID payloads. The other half of each IRP is ignored
 so its data is not counted twice. An OUT row means the host submitted a command;
 it is not proof that the card accepted it. A failed USB completion clears the
 device's pending transactions and fragment buffers to avoid crossing a data gap.
+A record truncated by the snapshot length is treated the same way: a truncated
+bulk transfer is a gap for its device only. USBPcap captures a whole root hub, so
+such records usually belong to unrelated devices such as USB storage.
 
 CCID messages are reassembled by bus, USB device and endpoint using the ten-byte
 header's `dwLength`. Complete messages sharing one transfer are also supported.
@@ -32,6 +35,13 @@ Time-extension responses preserve pending state. Failed CCID commands, USB
 failures and state-changing reader operations discard incomplete exchanges.
 Read-only GetSlotStatus and GetParameters polls have separately tracked replies
 and preserve transport state, unless the reply reports an inactive/removed card.
+Escape, T0APDU and IccClock are tracked the same way: they do not change the T=1
+transport and may occur between chain fragments.
+
+`PC_to_RDR_Secure` (PIN verify/modify) keeps the selected or inferred transport.
+Its reply and time extensions are consumed without an entry, whether PIN entry
+succeeds or is cancelled. The reader sends its own T=1 I-block, so T=1 sequence
+history is forgotten and the next exchange decodes normally.
 
 ## T=1 reconstruction and selection
 
@@ -61,7 +71,8 @@ same first-fragment convention as CCID chaining.
   ordinary APDUs while undecided. An ambiguous IFS request is buffered; if its
   probe fails, is replaced, or reaches capture end, its raw bytes are emitted
   when they form a valid APDU. This can delay that command's display. A lone
-  R-block never selects T=1. Power or parameter changes reset inferred mode.
+  R-block never selects T=1. Power, parameter, clock rate, mechanical and abort
+  commands reset inferred mode.
 
 Auto cannot remove every ambiguity without reader descriptors. A valid APDU pair
 can coincide with an IFS handshake, while a mid-session T=1 block can coincide
@@ -73,8 +84,8 @@ with a valid APDU. The explicit selector resolves these cases.
   not required, since live capture often begins after device enumeration. A reader
   must use APDU-level or T=1 TPDU-level CCID exchanges. Descriptor parsing and
   character-level exchange are not implemented.
-- T=0 TPDU reconstruction, secure PIN commands, vendor escape commands and ICCD
-  control transport are not decoded. T=1 frames split across separate CCID
+- T=0 TPDU reconstruction, the APDU inside secure PIN commands, vendor escape
+  payloads and ICCD control transport are not decoded. T=1 frames split across separate CCID
   messages are unsupported; splitting a CCID message across USB transfers works.
 - A response captured without its command is omitted, because it cannot safely be
   distinguished from a power-on ATR. Capturing after a command was sent may thus
@@ -83,17 +94,21 @@ with a valid APDU. The explicit selector resolves these cases.
   are not distinguished. Such composite readers are not supported yet; the UI
   filters by USB device address, not interface.
 - At capture end, unfinished CCID messages and pending responses are omitted.
-  Packet framing truncation is an error. The decoder does not scan byte by byte
+  A stream ending inside a PCAP record is an error. The decoder does not scan byte by byte
   for apparent CCID headers or attempt to repair corrupt captures.
   Intentional Stop uses `cancel()` to discard a partial last PCAP record and flush
   any complete ambiguous commands without treating cancellation as corruption.
   Final display-queue writes remain bounded and contribute to the dropped-entry
   counter if the queue is full.
-- PCAPNG, other USB link types, snapshots over 16 MiB, shortened PCAP records and
-  malformed USBPcap lengths are rejected with `std::runtime_error`. Discard the
+- PCAPNG, other USB link types, snapshots over 16 MiB, records longer than their
+  original length and malformed USBPcap lengths are rejected with
+  `std::runtime_error`. Discard the
   decoder after an exception. `finish()` is idempotent; `feed()` after it throws.
   CCID payloads are capped at 65,544 bytes, with at most 256 partial endpoint
-  messages and 256 card slots. Joined commands are capped at 65,544 bytes and
+  messages and 256 card slots. Bulk data of other devices can resemble CCID, so
+  reaching a bound evicts state instead of failing: the oldest partial message
+  (a gap for its device), or the least recently used slot, preferring slots that
+  never produced an entry. Joined commands are capped at 65,544 bytes and
   responses at 65,538 bytes. Poll tracking is bounded to the 256 CCID sequences
   per slot. T=1 INF fields are limited to 254 bytes per block.
 

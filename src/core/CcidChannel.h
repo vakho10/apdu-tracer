@@ -15,7 +15,7 @@ public:
 
 private:
     enum class Phase { Idle, Apdu, CommandAck, CommandNext, ResponseNext, Response,
-                       Atr, Probe, T1 };
+                       Atr, Probe, T1, Secure };
     void clearExchange();
     void resetTransport();
     void discardDamagedExchange();

@@ -14,6 +14,17 @@ bool append(std::vector<std::uint8_t>& to, Bytes bytes, std::size_t maximum) {
     to.insert(to.end(), bytes.begin(), bytes.end());
     return true;
 }
+
+// Reply type of a command that neither changes card state nor ends an
+// exchange, or zero for any other command.
+std::uint8_t sideCommandReply(std::uint8_t type) {
+    switch (type) {
+    case 0x6b: return 0x83; // Escape -> RDR_to_PC_Escape
+    case 0x6a: return 0x81; // T0APDU -> SlotStatus
+    case 0x6e: return 0x81; // IccClock -> SlotStatus
+    default: return 0;
+    }
+}
 } // namespace
 
 CcidChannel::CcidChannel(TransportMode mode) : configured_(mode), mode_(mode) {}
@@ -108,8 +119,24 @@ std::vector<TraceEntry> CcidChannel::feed(Bytes message, TraceEntry metadata) {
             polls_[sequence] = message[0] == 0x65 ? 0x81 : 0x82;
             return out;
         }
+        if (const auto reply = sideCommandReply(message[0])) {
+            // Escape, T0APDU and IccClock leave the card's protocol state
+            // intact. Track only their reply so it cannot end an exchange.
+            polls_[sequence] = reply;
+            return out;
+        }
         emitProbeFallback(out);
         polls_[sequence] = 0;
+        if (message[0] == 0x69) {
+            // A PIN pad sends its own APDU/T=1 block, which advances the T=1
+            // N(S) of both sides unseen. Keep the transport mode, forget the
+            // sequence history, and consume the reply and its time extensions.
+            clearExchange();
+            t1_.reset();
+            phase_ = Phase::Secure;
+            wireSequence_ = sequence;
+            return out;
+        }
         if (message[0] == 0x62) {
             resetTransport();
             if (body.empty() && message[7] <= 3 && level == 0) {
@@ -119,8 +146,9 @@ std::vector<TraceEntry> CcidChannel::feed(Bytes message, TraceEntry metadata) {
             return out;
         }
         if (message[0] != 0x6f) {
-            // Power, parameter, secure, abort and vendor operations can change
-            // the card/protocol state. Do not reuse an inferred mode after them.
+            // Power, parameter, clock rate, mechanical, abort and unknown
+            // operations can change the card/protocol state or abandon an
+            // exchange. Do not reuse an inferred mode after them.
             resetTransport();
             return out;
         }
@@ -197,7 +225,7 @@ std::vector<TraceEntry> CcidChannel::feed(Bytes message, TraceEntry metadata) {
     }
 
     const auto status = message[7];
-    if (message[0] == 0x81 || message[0] == 0x82) {
+    if (message[0] == 0x81 || message[0] == 0x82 || message[0] == 0x83) {
         if (polls_[sequence] == message[0]) {
             if ((status & 3) != 0) {
                 emitProbeFallback(out);
@@ -206,7 +234,8 @@ std::vector<TraceEntry> CcidChannel::feed(Bytes message, TraceEntry metadata) {
         }
         return out;
     }
-    if (mode_ == TransportMode::T1 && phase_ != Phase::Atr && message[0] == 0x80 &&
+    if (mode_ == TransportMode::T1 && phase_ != Phase::Atr && phase_ != Phase::Secure &&
+        message[0] == 0x80 &&
         (phase_ != Phase::T1 || sequence != wireSequence_)) {
         discardDamagedExchange();
         return out;
@@ -215,6 +244,12 @@ std::vector<TraceEntry> CcidChannel::feed(Bytes message, TraceEntry metadata) {
         sequence != wireSequence_) return out;
     if (message[0] == 0x80 && (status & 0xc0) == 0x80 && (status & 0x3f) == 0 &&
         body.empty()) return out;
+    if (phase_ == Phase::Secure) {
+        // PIN entry may fail or be cancelled; neither damages the transport.
+        if ((status & 3) != 0) resetTransport();
+        else clearExchange();
+        return out;
+    }
     if (message[0] != 0x80 || status != 0 || message[8] != 0) {
         emitProbeFallback(out);
         if ((status & 3) != 0) resetTransport();

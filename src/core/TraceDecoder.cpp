@@ -51,6 +51,13 @@ struct Assembly {
     std::uint64_t timestampUs{};
 };
 
+struct Slot {
+    explicit Slot(TransportMode mode) : channel(mode) {}
+    CcidChannel channel;
+    std::uint64_t lastUse{};
+    bool emitted{}; // Has produced an entry, so it is likely a real reader slot.
+};
+
 } // namespace
 
 struct TraceDecoder::Impl {
@@ -63,11 +70,13 @@ struct TraceDecoder::Impl {
     bool little{true};
     bool nanoseconds{false};
     bool finished{false};
+    bool truncated{false};
     std::uint32_t snaplen{};
     std::uint64_t timestampUs{};
     std::map<EndpointKey, Assembly> streams;
     TransportMode mode;
-    std::map<SlotKey, CcidChannel> channels;
+    std::map<SlotKey, Slot> channels;
+    std::uint64_t useCounter{};
 
     Impl(EntryHandler h, TransportMode transport) : handler(std::move(h)), mode(transport) {
         if (!handler) {
@@ -81,8 +90,31 @@ struct TraceDecoder::Impl {
         };
         for (auto& item : channels)
             if (sameDevice(item))
-                for (const auto& entry : item.second.transportGap()) handler(entry);
+                for (const auto& entry : item.second.channel.transportGap()) handler(entry);
         std::erase_if(streams, sameDevice);
+    }
+
+    // Bulk traffic of non-CCID devices on the same root hub can resemble CCID
+    // headers. Limits therefore evict state instead of failing the capture.
+    void evictChannel() {
+        auto victim = channels.end();
+        for (auto it = channels.begin(); it != channels.end(); ++it) {
+            if (victim == channels.end() ||
+                std::pair(it->second.emitted, it->second.lastUse) <
+                    std::pair(victim->second.emitted, victim->second.lastUse))
+                victim = it;
+        }
+        for (const auto& entry : victim->second.channel.finish()) handler(entry);
+        channels.erase(victim);
+    }
+
+    void evictStream() {
+        const auto oldest = std::min_element(streams.begin(), streams.end(),
+            [](const auto& left, const auto& right) {
+                return left.second.timestampUs < right.second.timestampUs;
+            });
+        // Its partial message is lost, which is a gap for that device.
+        invalidateDevice(std::get<0>(oldest->first), std::get<1>(oldest->first));
     }
 
     void globalHeader(Bytes b) {
@@ -123,14 +155,17 @@ struct TraceDecoder::Impl {
         if (captured > snaplen || captured > maxPacketBytes || captured > original) {
             throw std::runtime_error("PCAP record length is invalid or exceeds the snapshot limit.");
         }
-        if (captured < original) {
-            throw std::runtime_error("PCAP packet is truncated by the capture snapshot length. Capture again with full packets.");
-        }
-        if (captured < 27) {
+        // A snapshot-truncated record is legal PCAP. With a root-hub capture it
+        // usually belongs to unrelated bulk traffic, e.g. a USB storage device.
+        truncated = captured < original;
+        if (!truncated && captured < 27) {
             throw std::runtime_error("PCAP packet is shorter than the USBPcap header.");
         }
         timestampUs = static_cast<std::uint64_t>(seconds) * 1000000 +
                       (nanoseconds ? fraction / 1000 : fraction);
+        if (captured == 0) {
+            return; // Fully truncated: no packet bytes follow this header.
+        }
         stage = Stage::Packet;
         needed = captured;
     }
@@ -139,16 +174,19 @@ struct TraceDecoder::Impl {
         const SlotKey slot{std::get<0>(key), std::get<1>(key), message[5]};
         auto found = channels.find(slot);
         if (found == channels.end()) {
-            if (channels.size() >= maxChannels)
-                throw std::runtime_error("Too many CCID card slots in the capture.");
+            if (channels.size() >= maxChannels) evictChannel();
             found = channels.try_emplace(slot, mode).first;
         }
+        found->second.lastUse = ++useCounter;
         TraceEntry metadata;
         metadata.timestampUs = time;
         metadata.bus = std::get<0>(key);
         metadata.device = std::get<1>(key);
         metadata.endpoint = std::get<2>(key);
-        for (const auto& entry : found->second.feed(message, metadata)) handler(entry);
+        for (const auto& entry : found->second.channel.feed(message, metadata)) {
+            found->second.emitted = true;
+            handler(entry);
+        }
     }
 
     void bulkPayload(Bytes payload, const EndpointKey& key) {
@@ -160,9 +198,7 @@ struct TraceDecoder::Impl {
             if (!knownType(payload[0], incoming)) {
                 return; // Do not search arbitrary bulk bytes for embedded CCID headers.
             }
-            if (streams.size() >= maxEndpointStreams) {
-                throw std::runtime_error("Too many USB endpoint streams in the capture.");
-            }
+            while (streams.size() >= maxEndpointStreams) evictStream();
             streams.emplace(key, Assembly{});
         }
         auto& assembly = streams.at(key);
@@ -201,7 +237,19 @@ struct TraceDecoder::Impl {
         }
     }
 
+    void truncatedPacket(Bytes b) {
+        // Without the full payload, nothing of this transfer can be decoded.
+        // A truncated bulk transfer is a data gap for its device only.
+        if (b.size() >= 23 && b[22] == 3) {
+            invalidateDevice(read16(b, 17), read16(b, 19));
+        }
+    }
+
     void packet(Bytes b) {
+        if (truncated) {
+            truncatedPacket(b);
+            return;
+        }
         // USBPcap fields remain little-endian even in a big-endian PCAP file.
         const auto headerLength = read16(b, 0);
         const auto dataLength = read32(b, 23);
@@ -282,8 +330,8 @@ void TraceDecoder::cancel() {
     impl_->finished = true;
     impl_->buffer.clear();
     impl_->streams.clear();
-    for (auto& [key, channel] : impl_->channels)
-        for (const auto& entry : channel.finish()) impl_->handler(entry);
+    for (auto& [key, slot] : impl_->channels)
+        for (const auto& entry : slot.channel.finish()) impl_->handler(entry);
     impl_->channels.clear();
 }
 

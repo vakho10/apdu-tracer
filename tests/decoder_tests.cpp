@@ -84,6 +84,14 @@ struct Capture {
         put(data, packet.size(), 4, little);
         data.insert(data.end(), packet.begin(), packet.end());
     }
+    // A record shortened by the snapshot length: keep only `kept` bytes.
+    void addTruncated(const Data& packet, std::size_t kept) {
+        put(data, 1700000000, 4, little);
+        put(data, 0, 4, little);
+        put(data, kept, 4, little);
+        put(data, packet.size(), 4, little);
+        data.insert(data.end(), packet.begin(), packet.begin() + static_cast<std::ptrdiff_t>(kept));
+    }
 };
 
 const Data selectApdu{0x00, 0xa4, 0x04, 0x00, 0x07, 0xa0, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00};
@@ -296,9 +304,6 @@ void malformedCaptures() {
     set32(broken, 36, 0);
     expectError(broken, "length");
     broken = fixture().data;
-    set32(broken, 36, 1000);
-    expectError(broken, "truncated");
-    broken = fixture().data;
     broken[40] = 26;
     expectError(broken, "USBPcap");
     broken = fixture().data;
@@ -337,6 +342,62 @@ void boundedCcidAndTransferFailures() {
     require(decode(incomplete.data).empty(), "Unfinished CCID message emitted at capture end.");
 }
 
+void truncatedRecordsAreGaps() {
+    // A USB storage device on the same root hub exceeds the snapshot length.
+    // Its truncated records must not end decoding of the reader's traffic.
+    const auto bulkData = usb(Data(70000, 0x80), 0x81, true, 9);
+    Capture unrelated;
+    unrelated.add(usb(ccid(0x6f, selectApdu)));
+    unrelated.addTruncated(bulkData, 65535);
+    unrelated.addTruncated(bulkData, 12); // Too short to identify the device.
+    unrelated.addTruncated(bulkData, 0);
+    unrelated.add(usb(ccid(0x80, responseApdu), 0x81, true));
+    auto entries = decode(unrelated.data, 1);
+    require(entries.size() == 2, "A truncated record of another device disturbed the reader's exchange.");
+    require(entries[1].data == responseApdu, "Reader response was lost after another device's truncated record.");
+
+    // A truncated reader transfer is a gap: its response must not pair with
+    // a command whose bytes might be incomplete.
+    Capture readerGap;
+    readerGap.add(usb(ccid(0x6f, selectApdu)));
+    readerGap.addTruncated(usb(ccid(0x80, responseApdu), 0x81, true), 30);
+    readerGap.add(usb(ccid(0x80, responseApdu), 0x81, true));
+    readerGap.add(usb(ccid(0x6f, selectApdu, 0, 8)));
+    readerGap.add(usb(ccid(0x80, responseApdu, 0, 8), 0x81, true));
+    entries = decode(readerGap.data);
+    require(entries.size() == 3, "A truncated reader transfer did not discard only the affected exchange.");
+    require(entries[1].sequence == 8 && entries[2].sequence == 8, "Recovery after a truncated transfer failed.");
+
+    // A record larger than its original length is still corrupt.
+    auto broken = fixture().data;
+    set32(broken, 36, 10);
+    expectError(broken, "length");
+}
+
+void boundedStateEvictsInsteadOfFailing() {
+    // Arbitrary bulk data of other devices can look like CCID messages with
+    // any slot number. Exceeding the slot bound must not end the capture, and
+    // must not evict the reader's slot with a pending exchange.
+    Capture slots;
+    slots.add(usb(ccid(0x6f, selectApdu)));
+    for (std::uint16_t device = 9; device <= 10; ++device)
+        for (unsigned slot = 0; slot < 256; ++slot)
+            slots.add(usb(ccid(0x6f, {}, static_cast<std::uint8_t>(slot)), 1, false, device));
+    slots.add(usb(ccid(0x80, responseApdu), 0x81, true));
+    auto entries = decode(slots.data);
+    require(entries.size() == 2, "Fake CCID slots ended the capture or evicted the reader slot.");
+    require(entries[1].direction == Direction::Response, "Reader response was lost to slot eviction.");
+
+    // Partial messages on many endpoints evict the oldest partial message.
+    Capture streams;
+    for (std::uint16_t device = 20; device < 320; ++device)
+        streams.add(usb(Data{0x6f, 4, 0, 0, 0}, 2, false, device));
+    streams.add(usb(ccid(0x6f, selectApdu)));
+    streams.add(usb(ccid(0x80, responseApdu), 0x81, true));
+    entries = decode(streams.data);
+    require(entries.size() == 2, "Partial endpoint streams ended the capture or blocked the reader.");
+}
+
 void lifecycle() {
     TraceDecoder decoder([](const TraceEntry&) {});
     decoder.feed(Capture{}.data);
@@ -372,6 +433,8 @@ int main(int argc, char* argv[]) {
             {"short and extended APDU framing", apduFraming},
             {"malformed/truncated PCAP and USBPcap", malformedCaptures},
             {"bounded CCID and USB transfer failures", boundedCcidAndTransferFailures},
+            {"snapshot-truncated records are per-device gaps", truncatedRecordsAreGaps},
+            {"slot and stream bounds evict instead of failing", boundedStateEvictsInsteadOfFailing},
             {"decoder lifecycle", lifecycle}
         };
         for (const auto& [name, test] : tests) {

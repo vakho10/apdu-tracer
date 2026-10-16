@@ -87,9 +87,10 @@ this initial version cannot count driver-side losses.
 - **T=1 TPDU** exchanges support LRC/CRC checksums and chained command/response
   I-blocks. R-block acknowledgements, IFS negotiation, and WTX exchanges are
   omitted from the APDU display; identical I-block retransmissions are suppressed.
-- Character-level exchanges, T=0 TPDU reconstruction, secure PIN commands,
-  vendor escape commands, non-CCID readers, and contactless protocols outside
-  CCID are not supported.
+- Character-level exchanges, T=0 TPDU reconstruction, the APDU inside secure
+  PIN commands, vendor escape payloads, non-CCID readers, and contactless
+  protocols outside CCID are not decoded. PIN pad and escape commands do not
+  disturb decoding of the surrounding APDUs.
 - CCID framing and APDU lengths are checked conservatively. Reader descriptors
   are not decoded. Auto infers T=1 from an IFS handshake, an unambiguous complete
   command frame, or a chained frame and its acknowledgement. Some byte patterns
@@ -102,6 +103,8 @@ this initial version cannot count driver-side losses.
   numbers are not supported yet; response pairing does not distinguish them.
 - Power-on responses are tracked separately as ATRs. Failed CCID commands and
   time-extension notifications are not APDU responses.
+- Records truncated by the capture's snapshot length (often USB storage on the
+  same root hub) are skipped; for the reader they only drop the affected exchange.
 - Partial USB transfers are reassembled; invalid lengths, truncated packets,
   invalid T=1 checksums, and incomplete chains do not become displayed APDUs.
   After damaged T=1 traffic, recovery may omit an exchange until a safe boundary.
