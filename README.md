@@ -1,11 +1,11 @@
 # APDU Tracer
 
 A Windows desktop tracer built with **C++20, Qt 6 Widgets, and CMake**.
-It reads the installed USBPcap driver directly and displays sent (`>>`) and
-received (`<<`) APDUs as hexadecimal text.
+It reads the installed USBPcap driver directly and lists sent (`>>`) and
+received (`<<`) APDUs in a table, with ISO 7816-4 command names and status
+word meanings.
 
-This version focuses on capture and text. APDU interpretation, TLV decoding,
-themes, and an installer can follow later.
+TLV decoding, themes, and an installer can follow later.
 
 ## Download
 
@@ -83,9 +83,20 @@ zip files, not installers.
    in half is trimmed so the file ends on a complete record. The raw file contains
    what the driver captured: only the selected USB address, or the whole hub for **All**.
 5. Click **Start capture**, then use your existing smart-card application.
-6. **Clear** empties the display and the APDU counter at any time. During a capture
+6. Each APDU is a table row: number, time, direction, bus, device, card slot,
+   CCID sequence, length, **Info**, and the APDU bytes. **Info** names the command
+   (SELECT, GET RESPONSE, VERIFY, and common GlobalPlatform and EMV commands) or
+   explains the response status word, such as `6A82 — File or application not
+   found`. Error statuses are red and warnings orange. Very long APDUs are
+   shortened in the table; hover over the bytes to see more.
+7. **Filter** shows only rows containing hex bytes (`90 00` or `9000`, matched on
+   byte boundaries) or whose **Info** contains the text (`select`, `not found`).
+   The status bar then shows how many rows match.
+8. **Clear** empties the display and the APDU counter at any time. During a capture
    the capture keeps running and only APDUs after the click are shown.
-7. Click **Stop** before **Save text**. Selected text can also be copied normally.
+9. Select rows and press **Ctrl+C**, or right-click, to copy them; the menu can
+   also copy just the APDU bytes. Click **Stop** before **Save text**. Copy and
+   Save use the rows currently shown, with all bytes, in this format:
 
 ```text
 [12:34:56.001] bus 1 / device 5 / slot 0 / seq 7  >>  00 A4 04 00 00
@@ -103,9 +114,9 @@ CCID fragments and T=1 transport blocks are joined into complete APDUs. A joined
 entry keeps its first fragment's timestamp, and a response keeps the original
 command's sequence number even when continuation transfers use different numbers.
 
-The display retains recent APDUs up to **20,000 rows / 16 MiB of text**, and text
-export saves that displayed portion. The worker queue is bounded by both row
-count and text size; if the display cannot keep up
+The display retains recent APDUs up to **20,000 rows / 8 MiB of APDU bytes**, and
+text export saves the rows shown. The worker queue is bounded by both row count
+and APDU bytes; if the display cannot keep up
 with live APDU traffic, the status bar reports the number of dropped display
 entries. USBPcap itself silently drops packets when its kernel buffer
 overflows, and this app cannot count those losses. **Driver buffer** (default

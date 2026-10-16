@@ -22,7 +22,8 @@ function(apdu_windows_target target)
                                _WIN32_WINNT=0x0A00 WINVER=0x0A00)
 endfunction()
 
-add_library(apdu_core src/core/TraceDecoder.cpp src/core/CcidChannel.cpp src/core/T1Decoder.cpp)
+add_library(apdu_core src/core/TraceDecoder.cpp src/core/CcidChannel.cpp src/core/T1Decoder.cpp
+    src/core/ApduInfo.cpp)
 target_include_directories(apdu_core PUBLIC src)
 apdu_warnings(apdu_core)
 
@@ -48,6 +49,10 @@ if(BUILD_TESTING)
     target_link_libraries(transport_tests PRIVATE apdu_core)
     apdu_warnings(transport_tests)
     add_test(NAME transport_tests COMMAND transport_tests)
+    add_executable(apdu_info_tests tests/apdu_info_tests.cpp)
+    target_link_libraries(apdu_info_tests PRIVATE apdu_core)
+    apdu_warnings(apdu_info_tests)
+    add_test(NAME apdu_info_tests COMMAND apdu_info_tests)
     if(WIN32)
         # This standalone harness replaces driver-facing Win32 calls; it never
         # opens a real capture device and includes the implementation itself.
@@ -65,6 +70,7 @@ if(APDU_BUILD_GUI)
     qt_standard_project_setup()
     add_library(apdu_ui
         src/ui/RawCaptureWriter.cpp src/ui/RawCaptureWriter.h
+        src/ui/TraceModel.cpp src/ui/TraceModel.h
         src/ui/TraceView.cpp src/ui/TraceView.h
         src/ui/TraceWorker.cpp src/ui/TraceWorker.h
         src/ui/MainWindow.cpp src/ui/MainWindow.h

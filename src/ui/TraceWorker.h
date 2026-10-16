@@ -1,15 +1,16 @@
 #pragma once
 
+#include <QList>
 #include <QMutex>
-#include <QStringList>
 #include <QThread>
 #include <stop_token>
 #include "capture/UsbPcapBackend.h"
 #include "core/TraceDecoder.h"
+#include "TraceModel.h"
 
 namespace apdu {
 
-// Only the bounded text queue crosses threads. Capture and decoding both run
+// Only the bounded row queue crosses threads. Capture and decoding both run
 // on this worker, so high-volume USB traffic never queues raw bytes on the GUI.
 class TraceWorker final : public QThread {
     Q_OBJECT
@@ -24,8 +25,8 @@ public:
                 quint32 driverBufferBytes = CaptureOptions::defaultBufferBytes);
     ~TraceWorker() override;
     void stop();
-    QStringList takeLines();
-    quint64 droppedLines();
+    QList<TraceRow> takeRows();
+    quint64 droppedRows();
 
 signals:
     void ready(const QString& message);
@@ -43,8 +44,8 @@ private:
     quint32 driverBufferBytes_;
     std::stop_source stopSource_;
     QMutex mutex_;
-    QStringList pending_;
-    qsizetype pendingChars_ = 0;
+    QList<TraceRow> pending_;
+    qsizetype pendingBytes_ = 0;
     quint64 dropped_ = 0;
 };
 

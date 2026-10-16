@@ -5,13 +5,13 @@
 #include "ui/TraceWorker.h"
 
 #include <QApplication>
+#include <QClipboard>
 #include <QEventLoop>
+#include <QItemSelectionModel>
+#include <QKeyEvent>
 #include <QLabel>
-#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollBar>
-#include <QTextBlock>
-#include <QTextDocument>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -91,7 +91,7 @@ void losslessReplay(const QString& path) {
     bool failed = false;
     QObject::connect(&worker, &apdu::TraceWorker::failed, &loop, [&](const QString&) { failed = true; });
     QObject::connect(&worker, &QThread::finished, &loop, &QEventLoop::quit);
-    QObject::connect(&drain, &QTimer::timeout, &loop, [&] { count += worker.takeLines().size(); });
+    QObject::connect(&drain, &QTimer::timeout, &loop, [&] { count += worker.takeRows().size(); });
     QObject::connect(&deadline, &QTimer::timeout, &loop, [&] { failed = true; worker.stop(); loop.quit(); });
     drain.start(10);
     deadline.start(10000);
@@ -99,8 +99,8 @@ void losslessReplay(const QString& path) {
     loop.exec();
     worker.stop();
     worker.wait();
-    count += worker.takeLines().size();
-    require(!failed && count == 12000 && worker.droppedLines() == 0, "Offline replay lost entries in a large record");
+    count += worker.takeRows().size();
+    require(!failed && count == 12000 && worker.droppedRows() == 0, "Offline replay lost entries in a large record");
 }
 
 void cancellationWithFullQueue(const QString& path) {
@@ -115,10 +115,10 @@ void cancellationWithFullQueue(const QString& path) {
     worker.start();
     loop.exec();
     worker.wait();
-    const auto lines = worker.takeLines();
-    qsizetype characters = 0;
-    for (const auto& line : lines) characters += line.size();
-    require(blocked && !lines.isEmpty() && characters <= 4 * 1024 * 1024 && worker.droppedLines() == 0,
+    const auto rows = worker.takeRows();
+    qsizetype bytes = 0;
+    for (const auto& row : rows) bytes += row.data.size();
+    require(blocked && !rows.isEmpty() && bytes <= 4 * 1024 * 1024 && worker.droppedRows() == 0,
             "Worker did not bound long APDUs or cancel backpressure safely");
 }
 
@@ -133,12 +133,14 @@ void cancellationFlushesProbe(const QString& path) {
     require(!worker.wait(200), "Probe fixture finished instead of pausing on a full replay batch");
     worker.stop();
     require(worker.wait(2000), "Flushing the pending probe blocked cancellation");
-    const auto lines = worker.takeLines();
+    const auto rows = worker.takeRows();
     require(failure.isEmpty(), "Cancelling a pending probe reported a capture failure");
-    require(lines.size() == 1001 && worker.droppedLines() == 0,
+    require(rows.size() == 1001 && worker.droppedRows() == 0,
             "Stop lost the buffered raw-valid command or prior APDU entries");
-    require(lines.back().contains(QStringLiteral("seq 41"))
-            && lines.back().endsWith(QStringLiteral(">>  00 C1 01 FE 3E")),
+    const auto& probeRow = rows.back();
+    require(probeRow.sequence == 41 && probeRow.direction == apdu::Direction::Command
+            && probeRow.data == QByteArray::fromHex("00C101FE3E")
+            && apdu::formatTraceLine(probeRow).endsWith(QStringLiteral("seq 41  >>  00 C1 01 FE 3E")),
             "Stop did not preserve the unresolved probe as its original raw APDU");
 }
 
@@ -239,58 +241,159 @@ void rawCaptureReplays(const QString& path) {
             "Opening an unwritable raw capture path did not report an error");
 }
 
-QStringList rows(int first, int count) {
-    QStringList result;
-    for (int i = first; i < first + count; ++i) result.append(QStringLiteral("row %1").arg(i));
+// Rows labelled "row N" in the Info column, each with four APDU bytes.
+QList<apdu::TraceRow> rows(int first, int count) {
+    QList<apdu::TraceRow> result;
+    for (int i = first; i < first + count; ++i) {
+        apdu::TraceRow row;
+        row.info = QStringLiteral("row %1").arg(i);
+        row.data = QByteArray(4, static_cast<char>(i));
+        result.append(row);
+    }
     return result;
 }
 
-QString firstVisibleRow(QPlainTextEdit& view) {
-    return view.cursorForPosition(QPoint(2, 2)).block().text();
+apdu::TraceRow entryRow(apdu::Direction direction, const char* hex, quint8 sequence = 7) {
+    const auto bytes = QByteArray::fromHex(hex);
+    apdu::TraceEntry entry;
+    entry.timestampUs = 1700000000123456ULL;
+    entry.bus = 1;
+    entry.device = 5;
+    entry.sequence = sequence;
+    entry.direction = direction;
+    entry.data.assign(bytes.begin(), bytes.end());
+    return apdu::makeTraceRow(entry);
+}
+
+QString firstVisibleRow(apdu::TraceView& view) {
+    return view.indexAt(QPoint(2, 2)).siblingAtColumn(apdu::TraceModel::Info).data().toString();
 }
 
 void traceViewKeepsPosition() {
-    QPlainTextEdit view;
-    view.setLineWrapMode(QPlainTextEdit::NoWrap);
+    apdu::TraceView view({100, 1024 * 1024});
     view.setAttribute(Qt::WA_DontShowOnScreen);
-    view.resize(400, 200);
+    view.resize(500, 220);
     view.show();
-    const apdu::TraceLimits limits{100, 1024 * 1024};
+    const auto& model = view.traceModel();
 
-    apdu::appendTraceRows(view, rows(0, 100), false, limits);
-    view.verticalScrollBar()->setValue(40);
+    view.appendRows(rows(0, 100), false);
+    view.scrollTo(view.model()->index(40, 0), QAbstractItemView::PositionAtTop);
     QApplication::processEvents();
-    require(firstVisibleRow(view) == QStringLiteral("row 40"), "Fixture could not scroll to row 40");
+    require(firstVisibleRow(view) == QStringLiteral("row 40"),
+            QStringLiteral("Fixture could not scroll to row 40: top '%1', scroll %2 of %3, viewport %4")
+                .arg(firstVisibleRow(view)).arg(view.verticalScrollBar()->value())
+                .arg(view.verticalScrollBar()->maximum()).arg(view.viewport()->height()).toUtf8().constData());
 
     // 30 new rows trim rows 0-29 above the view. Reading must stay on row 40.
-    apdu::appendTraceRows(view, rows(100, 30), false, limits);
+    view.appendRows(rows(100, 30), false);
     QApplication::processEvents();
-    require(view.document()->blockCount() == 100, "Row limit was not applied");
-    require(view.document()->firstBlock().text() == QStringLiteral("row 30"), "Oldest rows were not trimmed");
+    require(model.rowCount() == 100, "Row limit was not applied");
+    require(model.row(0).info == QStringLiteral("row 30"), "Oldest rows were not trimmed");
     require(firstVisibleRow(view) == QStringLiteral("row 40"),
             "Trimming old rows moved the view while auto-scroll was off");
 
-    // Rows 30-129 hold about 730 characters. Ten more rows exceed a 780
-    // character limit, so a few rows starting at row 30 are trimmed while
-    // row 40 remains. The character limit must anchor the view the same way.
-    apdu::appendTraceRows(view, rows(130, 10), false, {1000, 780});
+    // With a filter, the anchored row is the first visible matching row.
+    view.setFilterText(QStringLiteral("row 4"));
     QApplication::processEvents();
-    require(view.document()->characterCount() <= 780, "Character limit was not applied");
-    require(view.document()->firstBlock().text() != QStringLiteral("row 30"),
-            "Character limit did not trim the oldest rows");
-    require(firstVisibleRow(view) == QStringLiteral("row 40"),
-            "Character trimming moved the view while auto-scroll was off");
+    view.scrollTo(view.model()->index(0, 0), QAbstractItemView::PositionAtTop);
+    require(firstVisibleRow(view) == QStringLiteral("row 4") || firstVisibleRow(view) == QStringLiteral("row 40"),
+            "Filter did not keep matching rows only");
+    const auto anchored = firstVisibleRow(view);
+    view.appendRows(rows(130, 5), false);
+    QApplication::processEvents();
+    require(firstVisibleRow(view) == anchored, "Filtered view moved while auto-scroll was off");
+    view.setFilterText({});
 
-    // When rows above the first visible row run out, the view stays at the top.
-    apdu::appendTraceRows(view, rows(140, 90), false, limits);
+    // When the anchored row itself is trimmed, the view stays at the top.
+    view.scrollTo(view.model()->index(10, 0), QAbstractItemView::PositionAtTop);
+    view.appendRows(rows(135, 95), false);
     QApplication::processEvents();
     require(view.verticalScrollBar()->value() == 0, "View was not clamped to the oldest remaining row");
 
     // Following the trace still shows the newest row.
-    apdu::appendTraceRows(view, rows(230, 5), true, limits);
+    view.appendRows(rows(230, 5), true);
     QApplication::processEvents();
     require(view.verticalScrollBar()->value() == view.verticalScrollBar()->maximum(),
             "Auto-scroll did not follow the newest row");
+}
+
+void modelLimitsAndIds() {
+    apdu::TraceModel model({3, 1000});
+    require(model.append(rows(0, 5)) == 2 && model.rowCount() == 3, "Row limit trimmed the wrong number of rows");
+    require(model.row(0).id == 3 && model.row(2).id == 5, "Rows were not numbered from 1 in arrival order");
+    require(model.rowForId(2) == -1 && model.rowForId(4) == 1 && model.rowForId(6) == -1, "Row id lookup failed");
+    require(model.bytes() == 12, "Byte total does not match the kept rows");
+    model.clear();
+    model.append(rows(0, 1));
+    require(model.rowCount() == 1 && model.row(0).id == 1 && model.bytes() == 4, "Clear did not restart numbering");
+
+    apdu::TraceModel bytes({100, 10});
+    bytes.append(rows(0, 5));
+    require(bytes.rowCount() == 2 && bytes.bytes() == 8, "Byte limit was not applied");
+    apdu::TraceRow huge;
+    huge.data = QByteArray(64, 'x');
+    bytes.append({huge});
+    require(bytes.rowCount() == 1 && bytes.bytes() == 64, "The newest row must be kept even above the byte limit");
+}
+
+void rowsAndFilter() {
+    const auto select = entryRow(apdu::Direction::Command, "00A4040005A00000000300");
+    const auto success = entryRow(apdu::Direction::Response, "6F109000");
+    const auto missing = entryRow(apdu::Direction::Response, "6A82");
+    const auto unknown = entryRow(apdu::Direction::Command, "00990000");
+    require(select.info == QStringLiteral("SELECT") && unknown.info == QStringLiteral("INS 99"),
+            "Command rows were not named");
+    require(success.info == QStringLiteral("9000 — Success") && success.status == apdu::StatusKind::Success,
+            "Success status was not described");
+    require(missing.info == QStringLiteral("6A82 — File or application not found")
+            && missing.status == apdu::StatusKind::Error, "Error status was not described");
+    require(apdu::formatTraceLine(select).endsWith(
+                QStringLiteral("bus 1 / device 5 / slot 0 / seq 7  >>  00 A4 04 00 05 A0 00 00 00 03 00")),
+            "Exported line format changed");
+
+    apdu::TraceModel model;
+    model.append({select, success, missing, unknown});
+    apdu::TraceFilterModel filter(&model);
+    const auto shown = [&filter](const char* text) {
+        filter.setFilterText(QString::fromUtf8(text));
+        return filter.rowCount();
+    };
+    require(shown("") == 4, "An empty filter must show every row");
+    require(shown("90 00") == 1 && shown("9000") == 1, "Hex filter with or without spaces");
+    require(shown("09 00") == 0, "Hex filter must match whole bytes only");
+    require(shown("a0 00 00 00 03") == 1, "Hex filter inside a command");
+    require(shown("select") == 1, "Text filter is case-insensitive");
+    require(shown("not found") == 1, "Text filter matches status meanings");
+    require(shown("zz") == 0, "Unmatched filter");
+
+    apdu::TraceRow longRow;
+    longRow.data = QByteArray(apdu::TraceModel::maxDisplayBytes + 10, '\x11');
+    model.append({longRow});
+    const auto display = model.data(model.index(4, apdu::TraceModel::Data)).toString();
+    require(display.endsWith(QStringLiteral(" …")) && display.size() < longRow.data.size() * 3,
+            "Long APDUs must be shortened for display");
+    require(model.text(4).endsWith(QStringLiteral(">> ") + QStringLiteral(" 11").repeated(longRow.data.size())),
+            "Exported text must keep all bytes");
+}
+
+void copySelectedRows() {
+    apdu::TraceView view;
+    view.setAttribute(Qt::WA_DontShowOnScreen);
+    view.resize(500, 220);
+    view.show();
+    view.appendRows({entryRow(apdu::Direction::Command, "00A4040000", 1),
+                     entryRow(apdu::Direction::Response, "6A82", 1),
+                     entryRow(apdu::Direction::Command, "00B0000010", 2)}, true);
+    auto* selection = view.selectionModel();
+    const auto flags = QItemSelectionModel::Select | QItemSelectionModel::Rows;
+    selection->select(view.model()->index(2, 0), flags);
+    selection->select(view.model()->index(0, 0), flags);
+    const auto expected = view.traceModel().text(0) + QLatin1Char('\n') + view.traceModel().text(2);
+    require(view.selectedText() == expected, "Selected rows were not copied oldest first in the export format");
+    require(view.selectedHex() == QStringLiteral("00 A4 04 00 00\n00 B0 00 00 10"), "APDU hex copy");
+    QKeyEvent copy(QEvent::KeyPress, Qt::Key_C, Qt::ControlModifier);
+    QApplication::sendEvent(&view, &copy);
+    require(QApplication::clipboard()->text() == expected, "Ctrl+C did not copy the selected rows");
 }
 
 QPushButton* button(QWidget& window, const QString& text) {
@@ -316,7 +419,9 @@ void clearDuringSession(const QString& path) {
     deadline.setSingleShot(true);
     deadline.start(15000);
 
-    window.openCapture(path); // 12,000 APDUs, replayed in backpressured batches.
+    // 30,000 APDUs. Clear discards at most the 10,000-row worker queue and the
+    // rows shown so far, so APDUs always arrive after it.
+    window.openCapture(path);
     auto* clear = button(window, QStringLiteral("Clear"));
     auto* stop = button(window, QStringLiteral("Stop"));
     require(clear->isEnabled(), "Clear was disabled while a session was running");
@@ -332,8 +437,12 @@ void clearDuringSession(const QString& path) {
     if (!finished) loop.exec();
     require(finished && success, "Session did not finish successfully after Clear");
     const auto shown = window.traceText().split(QLatin1Char('\n'), Qt::SkipEmptyParts).size();
-    require(shown > 0 && shown < 12000, "Display did not continue with only APDUs after Clear");
-    require(apduCount(window)->text() == QStringLiteral("%1 APDUs").arg(shown),
+    const auto counted = apduCount(window)->text().section(QLatin1Char(' '), 0, 0).toLongLong();
+    require(shown > 0 && counted < 30000,
+            QStringLiteral("Display did not continue with only APDUs after Clear: %1 rows shown, %2 counted")
+                .arg(shown).arg(counted).toUtf8().constData());
+    // The counter counts every APDU since Clear; the table keeps the newest 20,000.
+    require(shown == std::min<qint64>(counted, apdu::TraceLimits{}.maxRows),
             "APDU counter does not match the rows shown after Clear");
 }
 
@@ -348,8 +457,8 @@ void boundedWindow(const QString& path) {
     deadline.start(15000);
     window.openCapture(path);
     loop.exec();
-    const auto text = window.traceText();
-    require(success && !text.isEmpty() && text.size() <= 8 * 1024 * 1024,
+    const auto& model = window.traceView().traceModel();
+    require(success && model.rowCount() > 0 && model.bytes() <= apdu::TraceLimits{}.maxBytes,
             "Window did not retain a bounded trace of long APDUs");
 }
 } // namespace
@@ -365,15 +474,20 @@ int main(int argc, char* argv[]) {
         writeCapture(small, 12000, false);
         writeCapture(large, 100, true);
         writeCapture(probe, 1000, false, true);
+        const auto busy = directory.filePath(QStringLiteral("busy.pcap"));
+        writeCapture(busy, 30000, false);
         losslessReplay(small);
         cancellationWithFullQueue(large);
         cancellationFlushesProbe(probe);
         rawCaptureReplays(directory.filePath(QStringLiteral("raw.pcap")));
         boundedWindow(large);
         traceViewKeepsPosition();
-        clearDuringSession(small);
-        std::cout << "Lossless replay, bounded text, cancellation, pending probe flush, raw capture replay, "
-                     "trace view position, and Clear during a session passed\n";
+        modelLimitsAndIds();
+        rowsAndFilter();
+        copySelectedRows();
+        clearDuringSession(busy);
+        std::cout << "Lossless replay, bounded rows, cancellation, pending probe flush, raw capture replay, "
+                     "table position, limits, filter, copy, and Clear during a session passed\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
