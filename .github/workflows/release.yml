@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Manual runs build and upload the package as a workflow artifact only.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-2022
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # project() VERSION in CMakeLists.txt is the single version source; a
+      # tag must match it so the binary's --version agrees with the release.
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $match = Select-String -Path CMakeLists.txt -Pattern 'project\(\S+ VERSION (\d+\.\d+\.\d+)'
+          if (-not $match) { throw 'No project() VERSION found in CMakeLists.txt' }
+          $version = $match.Matches[0].Groups[1].Value
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match CMake version v$version"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.1'
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Configure
+        run: cmake -S . -B build/windows -G "Visual Studio 17 2022" -A x64
+      - name: Build
+        run: cmake --build build/windows --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build/windows -C Release --output-on-failure
+
+      # The install step runs Qt's deployment script, which collects the Qt
+      # runtime DLLs and plugins next to the executable.
+      - name: Install
+        run: cmake --install build/windows --config Release --prefix "${{ github.workspace }}/package/APDUTracer-${{ steps.version.outputs.version }}"
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $name = "APDUTracer-${{ steps.version.outputs.version }}-win64"
+          $root = "package/APDUTracer-${{ steps.version.outputs.version }}"
+          if (-not (Test-Path "$root/bin/APDUTracer.exe")) { throw 'APDUTracer.exe is missing from the install tree' }
+          Copy-Item LICENSE, README.md $root
+          Compress-Archive -Path $root -DestinationPath "$name.zip"
+          $hash = (Get-FileHash "$name.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Set-Content -Encoding ascii "$name.zip.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: APDUTracer-${{ steps.version.outputs.version }}-win64
+          path: |
+            APDUTracer-*-win64.zip
+            APDUTracer-*-win64.zip.sha256
+          if-no-files-found: error
+
+  publish:
+    if: github.ref_type == 'tag'
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: APDUTracer-${{ needs.package.outputs.version }}-win64
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: APDU Tracer ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            APDUTracer-*-win64.zip
+            APDUTracer-*-win64.zip.sha256

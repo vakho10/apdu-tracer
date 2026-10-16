@@ -4,8 +4,15 @@ A Windows desktop tracer built with **C++20, Qt 6 Widgets, and CMake**.
 It reads the installed USBPcap driver directly and displays sent (`>>`) and
 received (`<<`) APDUs as hexadecimal text.
 
-This initial version focuses on capture and text. APDU interpretation, TLV
-decoding, themes, and installers can follow later.
+This version focuses on capture and text. APDU interpretation, TLV decoding,
+themes, and an installer can follow later.
+
+## Download
+
+Each [GitHub release](https://github.com/vakho10/apdu-tracer/releases) has a
+portable `APDUTracer-<version>-win64.zip` with a `.sha256` checksum. Extract it
+and run `bin\APDUTracer.exe`; the Qt runtime is included. Install the
+[USBPcap driver](https://desowin.org/usbpcap/) separately for live capture.
 
 ## Build on Windows
 
@@ -43,7 +50,7 @@ On Windows the install step uses Qt's deployment support to collect runtime
 DLLs and plugins. It does not install or bundle the USBPcap driver. Qt's
 [Windows deployment guide](https://doc.qt.io/qt-6/windows-deployment.html)
 describes runtime deployment. Keep Qt and third-party license notices with any
-redistributed runtime; this prototype does not produce a release installer.
+redistributed runtime. Releases are portable zip files, not installers.
 
 ## Use
 
