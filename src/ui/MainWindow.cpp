@@ -206,6 +206,7 @@ void MainWindow::openCapture(const QString& path) {
 void MainWindow::startWorker(TraceWorker* worker) {
     clearTrace();
     sessionRawPath_.clear();
+    clearedDuringSession_ = false;
     worker_ = worker;
     failed_ = false;
     setBusy(true);
@@ -227,7 +228,9 @@ void MainWindow::startWorker(TraceWorker* worker) {
         setBusy(false);
         if (!failed_) {
             auto message = dropped ? QStringLiteral("Capture ended — %1 APDUs dropped while display was busy").arg(dropped)
-                                   : QStringLiteral("Session ended — %1 APDUs").arg(total_);
+                                   : clearedDuringSession_
+                                         ? QStringLiteral("Session ended — %1 APDUs since Clear").arg(total_)
+                                         : QStringLiteral("Session ended — %1 APDUs").arg(total_);
             if (!sessionRawPath_.isEmpty())
                 message += QStringLiteral("; raw capture saved to %1").arg(sessionRawPath_);
             status_->setText(message);
@@ -261,11 +264,16 @@ void MainWindow::setBusy(bool busy) {
     start_->setEnabled(!busy && devices_->count() > 0);
     stop_->setEnabled(busy);
     open_->setEnabled(!busy);
-    clear_->setEnabled(!busy);
     save_->setEnabled(!busy && total_ > 0);
 }
 
 void MainWindow::clearTrace() {
+    if (worker_) {
+        // The capture keeps running. Rows queued before the click are
+        // discarded too, so nothing older than the click appears afterwards.
+        worker_->takeLines();
+        clearedDuringSession_ = true;
+    }
     trace_->clear();
     total_ = 0;
     count_->setText(QStringLiteral("0 APDUs"));

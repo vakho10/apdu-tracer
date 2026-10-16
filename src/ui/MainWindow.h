@@ -59,5 +59,6 @@ private:
     QString sessionRawPath_;
     quint64 total_ = 0;
     bool failed_ = false;
+    bool clearedDuringSession_ = false;
 };
 } // namespace apdu
